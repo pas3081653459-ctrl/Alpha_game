@@ -1,6 +1,7 @@
 #include "Combat/AlphaCombatComponent.h"
 #include "Rules/CombatRules.h"
 #include "Rules/PlayerControlRules.h"
+#include "World/AlphaBreakableProp.h"
 
 #include "CollisionQueryParams.h"
 #include "CollisionShape.h"
@@ -328,14 +329,49 @@ void UAlphaCombatComponent::ReleaseAttack()
         ? FCollisionShape::MakeBox(FVector(35.0f, Data.HalfWidth, Data.HalfHeight))
         : FCollisionShape::MakeBox(FVector(35.0f, FMath::Max(1.0f, AttackRadius), 60.0f));
     World->SweepMultiByObjectType(Hits, Start, End, PendingFacing.Rotation().Quaternion(), Objects, Shape, Query);
+    if (bPendingCombo)
+    {
+        AAlphaBreakableProp::AffectAttack(World, Owner, Start, End, static_cast<float>(Data.HalfWidth));
+    }
+    const int32 MeleeHitCount = Hits.Num();
+    FVector ImpactOrigin = FVector::ZeroVector;
+    bool bHasGroundImpact = false;
+    if (bPendingCombo && ComboStage == 5)
+    {
+        const FVector Probe = Owner->GetActorLocation() + PendingFacing * 110.f + FVector(0, 0, 30.f);
+        FHitResult FloorHit;
+        FCollisionObjectQueryParams FloorObjects;
+        FloorObjects.AddObjectTypesToQuery(ECC_WorldStatic);
+        if (World->LineTraceSingleByObjectType(FloorHit, Probe,
+            Probe - FVector(0, 0, AlphaPlayerControl::GroundImpactTraceDepth(bPendingAirborne)), FloorObjects, Query)
+            && FloorHit.ImpactNormal.Z >= .65f)
+        {
+            const float Radius = static_cast<float>(AlphaPlayerControl::GroundImpactRadius(bPendingAirborne));
+            ImpactOrigin = FloorHit.ImpactPoint + FloorHit.ImpactNormal * 8.f;
+            FCollisionQueryParams ImpactSight(SCENE_QUERY_STAT(AlphaImpactSight), false, Owner);
+            // Do not project a shockwave through a wall merely because floor exists beyond it.
+            bHasGroundImpact = !World->LineTraceTestByChannel(Owner->GetActorLocation(), ImpactOrigin, ECC_Visibility, ImpactSight);
+            if (bHasGroundImpact)
+            {
+                TArray<FHitResult> ImpactHits;
+                World->SweepMultiByObjectType(ImpactHits, ImpactOrigin, ImpactOrigin + FVector(0, 0, .1f),
+                    FQuat::Identity, Objects, FCollisionShape::MakeSphere(Radius), Query);
+                Hits.Append(ImpactHits);
+                AAlphaBreakableProp::AffectAttack(World, Owner, ImpactOrigin, ImpactOrigin, Radius);
+                MulticastGroundImpact(FloorHit.ImpactPoint, FloorHit.ImpactNormal, Radius);
+            }
+        }
+    }
+    // Melee and shockwave share one damage set: a finisher can never double-hit a target.
     TSet<AActor*> HitActors;
     const float Damage = bPendingCombo ? LightDamage * static_cast<float>(Data.DamageScale)
         : FMath::Max(0.0f, bHeavy ? HeavyDamage : LightDamage);
     const float PoiseDamage = bPendingCombo ? LightPoiseDamage * static_cast<float>(Data.PoiseScale)
         : FMath::Max(0.0f, bHeavy ? HeavyPoiseDamage : LightPoiseDamage);
     const APawn* AttackingPawn = Cast<APawn>(Owner);
-    for (const FHitResult& Hit : Hits)
+    for (int32 HitIndex = 0; HitIndex < Hits.Num(); ++HitIndex)
     {
+        const FHitResult& Hit = Hits[HitIndex];
         AActor* Target = Hit.GetActor();
         if (!IsValid(Target) || Target == Owner || HitActors.Contains(Target) || IsFriendly(Target)) continue;
         if (TeamId == 2)
@@ -352,7 +388,8 @@ void UAlphaCombatComponent::ReleaseAttack()
         }
         FCollisionQueryParams VisibilityQuery(SCENE_QUERY_STAT(AlphaMeleeVisibility), false, Owner);
         VisibilityQuery.AddIgnoredActor(Target);
-        if (World->LineTraceTestByChannel(Start, Target->GetActorLocation(), ECC_Visibility, VisibilityQuery)) continue;
+        const FVector HitOrigin = HitIndex < MeleeHitCount ? Start : ImpactOrigin;
+        if (World->LineTraceTestByChannel(HitOrigin, Target->GetActorLocation(), ECC_Visibility, VisibilityQuery)) continue;
         HitActors.Add(Target);
         if (UAlphaCombatComponent* TargetCombat = Target->FindComponentByClass<UAlphaCombatComponent>())
         {
@@ -362,6 +399,12 @@ void UAlphaCombatComponent::ReleaseAttack()
             if (TargetCombat->GetDamageRevision() != BeforeDamage)
             {
                 NotifyHitConfirmed(Target, TargetCombat->GetPoiseBreakRevision() != BeforeBreak);
+                const float Lift = bPendingCombo ? static_cast<float>(AlphaPlayerControl::ComboLiftSpeed(ComboStage, bPendingAirborne)) : 0.f;
+                if (Lift > 0.f && TargetCombat->IsAlive() && !Target->ActorHasTag(TEXT("Boss")))
+                {
+                    if (ACharacter* Victim = Cast<ACharacter>(Target))
+                        Victim->LaunchCharacter(PendingFacing * 90.f + FVector(0, 0, Lift), true, true);
+                }
             }
         }
         else
@@ -516,3 +559,8 @@ void UAlphaCombatComponent::OnRep_Health(float PreviousHealth)
 }
 
 void UAlphaCombatComponent::OnRep_Poise() { OnVitalsChanged.Broadcast(); }
+
+void UAlphaCombatComponent::MulticastGroundImpact_Implementation(FVector Location, FVector Normal, float Radius)
+{
+    OnGroundImpact.Broadcast(Location, Normal, Radius);
+}

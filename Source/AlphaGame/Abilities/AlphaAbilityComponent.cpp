@@ -1,9 +1,11 @@
 #include "Abilities/AlphaAbilityComponent.h"
+#include "World/AlphaBreakableProp.h"
 
 #include "Characters/AlphaCharacter.h"
 #include "Combat/AlphaCombatComponent.h"
 #include "Coop/AlphaReviveComponent.h"
 #include "Rules/CombatRules.h"
+#include "Rules/CompanionRules.h"
 #include "Rules/PlayerControlRules.h"
 #include "CollisionQueryParams.h"
 #include "CollisionShape.h"
@@ -101,42 +103,44 @@ void UAlphaAbilityComponent::ExecuteSkill(int32 Slot)
     // U alone builds energy. I and O have fixed costs; full energy never silently empowers U/I.
     // The action lock also cancels pending melee, buffered combos and air-combo hold.
     Combat->SetActionLockFor(Slot == 0 ? 0.35f : (Slot == 1 ? 0.55f : 0.8f));
-    MulticastSkill(Archetype, Slot, Slot == 2);
+    MulticastSkill(Archetype, Slot, Character->GetActorLocation(), Character->GetActorForwardVector());
 
+    const float SkillRadius = static_cast<float>(AlphaCompanionRules::GetSkillRadius(Archetype, Slot));
+    const float SkillReach = static_cast<float>(AlphaCompanionRules::GetSkillReach(Archetype, Slot));
     if (Slot == 2)
     {
-        if (Archetype == 0) AffectEnemies(180.0f, 360.0f, 100.0f, 110.0f);
-        else if (Archetype == 1) AffectEnemies(300.0f, 0.0f, 80.0f, 90.0f, 0.0f, 600.0f);
-        else AffectEnemies(460.0f, 0.0f, 65.0f, 140.0f);
+        if (Archetype == 0) AffectEnemies(SkillRadius, SkillReach, 100.0f, 110.0f);
+        else if (Archetype == 1) AffectEnemies(SkillRadius, SkillReach, 80.0f, 90.0f, 0.0f, 600.0f);
+        else AffectEnemies(SkillRadius, SkillReach, 65.0f, 140.0f);
     }
     else if (Archetype == 0 && Slot == 0)
     {
         // Guard burst: no claim that a successful parry was detected.
         Combat->SetInvulnerableFor(0.35f);
-        AffectEnemies(100.0f, 110.0f, 16.0f, 25.0f);
+        AffectEnemies(SkillRadius, SkillReach, 16.0f, 25.0f);
     }
     else if (Archetype == 0)
     {
-        AffectEnemies(110.0f, 240.0f, 42.0f, 55.0f);
+        AffectEnemies(SkillRadius, SkillReach, 42.0f, 55.0f);
     }
     else if (Archetype == 1 && Slot == 0)
     {
         // Launch uses normal CharacterMovement collision; never teleport through a wall.
         Character->LaunchCharacter(Character->GetActorForwardVector() * 900.0f, true, false);
         Combat->SetInvulnerableFor(0.12f);
-        AffectEnemies(85.0f, 200.0f, 20.0f, 20.0f);
+        AffectEnemies(SkillRadius, SkillReach, 20.0f, 20.0f);
     }
     else if (Archetype == 1)
     {
-        AffectEnemies(210.0f, 0.0f, 24.0f, 26.0f, 0.0f, 450.0f);
+        AffectEnemies(SkillRadius, SkillReach, 24.0f, 26.0f, 0.0f, 450.0f);
     }
     else if (Slot == 0)
     {
-        AffectEnemies(420.0f, 0.0f, 8.0f, 16.0f, 350.0f);
+        AffectEnemies(SkillRadius, SkillReach, 8.0f, 16.0f, 350.0f);
     }
     else
     {
-        AffectEnemies(310.0f, 0.0f, 12.0f, 60.0f);
+        AffectEnemies(SkillRadius, SkillReach, 12.0f, 60.0f);
     }
     Character->ForceNetUpdate();
 }
@@ -150,6 +154,7 @@ void UAlphaAbilityComponent::AffectEnemies(float Radius, float Reach, float Dama
     const FVector Start = Character->GetActorLocation();
     const FVector Facing = Character->GetActorForwardVector().GetSafeNormal2D();
     const FVector End = Start + (Facing.IsNearlyZero() ? FVector::ForwardVector : Facing) * Reach;
+    AAlphaBreakableProp::AffectAttack(GetWorld(), Character, Start, End, Radius);
     FCollisionObjectQueryParams Objects;
     Objects.AddObjectTypesToQuery(ECC_Pawn);
     FCollisionQueryParams Query(SCENE_QUERY_STAT(AlphaSkill), false, Character);
@@ -248,18 +253,14 @@ void UAlphaAbilityComponent::ResetForRound()
     GetOwner()->ForceNetUpdate();
 }
 
-void UAlphaAbilityComponent::MulticastSkill_Implementation(int32 Archetype, int32 Slot, bool bUltimate)
+void UAlphaAbilityComponent::MulticastSkill_Implementation(int32 Archetype, int32 Slot, FVector Origin, FVector Facing)
 {
     OnSkillActivated.Broadcast(Slot);
     if (!GetOwner() || !GetWorld() || GetWorld()->GetNetMode() == NM_DedicatedServer) return;
-    const FVector Origin = GetOwner()->GetActorLocation();
     const FLinearColor Color = Archetype == 0 ? FLinearColor(.9f, .5f, .22f)
         : (Archetype == 1 ? FLinearColor(.12f, .75f, .8f) : FLinearColor(.9f, .7f, .25f));
-    const EAlphaEffectType Type = Slot == 2 ? EAlphaEffectType::Ultimate : (Archetype == 0
-        ? (Slot == 0 ? EAlphaEffectType::Slash : EAlphaEffectType::HeavySlash)
-        : (Archetype == 1 ? (Slot == 0 ? EAlphaEffectType::Dash : EAlphaEffectType::Launch)
-            : (Slot == 0 ? EAlphaEffectType::Pull : EAlphaEffectType::Pulse)));
-    AAlphaCombatEffect::Spawn(GetWorld(), Origin, GetOwner()->GetActorForwardVector(), Type, Color, bUltimate);
+    // Snapshot the authority's release transform; replicated movement may arrive later.
+    AAlphaCombatEffect::SpawnSkill(GetWorld(), Origin, Facing, Archetype, Slot, Color);
 }
 
 void UAlphaAbilityComponent::MulticastCoopCue_Implementation(FVector Location)

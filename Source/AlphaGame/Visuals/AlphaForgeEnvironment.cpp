@@ -22,7 +22,7 @@ AAlphaForgeEnvironment::AAlphaForgeEnvironment()
     Key->SetMobility(EComponentMobility::Movable);
     Key->SetRelativeRotation(FRotator(-52, -35, 0));
     Key->SetIntensity(7.f);
-    Key->SetLightColor(FLinearColor(1.f, .8f, .59f));
+    Key->SetLightColor(FLinearColor(1.f, .91f, .8f));
     Key->SetCastShadows(true);
 
     UDirectionalLightComponent* Fill = CreateDefaultSubobject<UDirectionalLightComponent>(TEXT("CoolFill"));
@@ -30,7 +30,7 @@ AAlphaForgeEnvironment::AAlphaForgeEnvironment()
     Fill->SetMobility(EComponentMobility::Movable);
     Fill->SetRelativeRotation(FRotator(-30, 140, 0));
     Fill->SetIntensity(2.f);
-    Fill->SetLightColor(FLinearColor(.42f, .68f, .82f));
+    Fill->SetLightColor(FLinearColor(.36f, .58f, 1.f));
     Fill->SetCastShadows(false);
 
     USkyLightComponent* Sky = CreateDefaultSubobject<USkyLightComponent>(TEXT("AmbientSky"));
@@ -44,7 +44,7 @@ AAlphaForgeEnvironment::AAlphaForgeEnvironment()
     UExponentialHeightFogComponent* Fog = CreateDefaultSubobject<UExponentialHeightFogComponent>(TEXT("WorkshopHaze"));
     Fog->SetupAttachment(RootComponent);
     Fog->SetRelativeLocation(FVector(0, 0, -150));
-    Fog->SetFogDensity(.006f);
+    Fog->SetFogDensity(.003f);
     Fog->SetFogHeightFalloff(.18f);
     Fog->SetFogInscatteringColor(FLinearColor(.045f, .075f, .085f));
     Fog->SetStartDistance(1100.f);
@@ -60,15 +60,15 @@ AAlphaForgeEnvironment::AAlphaForgeEnvironment()
     Settings.bOverride_AutoExposureBias = true;
     Settings.AutoExposureBias = -1.f;
     Settings.bOverride_BloomIntensity = true;
-    Settings.BloomIntensity = .25f;
+    Settings.BloomIntensity = .18f;
     Settings.bOverride_BloomThreshold = true;
     Settings.BloomThreshold = 2.f;
     Settings.bOverride_VignetteIntensity = true;
-    Settings.VignetteIntensity = .15f;
+    Settings.VignetteIntensity = .08f;
     Settings.bOverride_MotionBlurAmount = true;
     Settings.MotionBlurAmount = 0.f;
     Settings.bOverride_AmbientOcclusionIntensity = true;
-    Settings.AmbientOcclusionIntensity = .55f;
+    Settings.AmbientOcclusionIntensity = .35f;
 
     // Three local lights maximum; none cast dynamic shadows or require Lumen.
     const auto AddLamp = [this](const TCHAR* Name, FVector Position, FLinearColor Color, float Intensity, float Radius)

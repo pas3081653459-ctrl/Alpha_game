@@ -30,6 +30,8 @@ def main():
         'Scripts/test_companion_rules.cpp',
         'Source/AlphaGame/World/AlphaGameMode.h',
         'Source/AlphaGame/World/AlphaGameState.h',
+        'Source/AlphaGame/World/AlphaBreakableProp.h',
+        'Source/AlphaGame/Tests/AlphaEnvironmentTests.cpp',
         'Source/AlphaGame/World/AlphaPlayerController.h',
         'Source/AlphaGame/World/AlphaGameInstance.h',
         'Source/AlphaGame/UI/AlphaHUD.h',

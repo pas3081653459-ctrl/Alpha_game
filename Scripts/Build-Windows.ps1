@@ -26,10 +26,12 @@ if ($Action -in @('Art', 'Package')) {
     if ($ArtExit -ne 0) { exit $ArtExit }
     if (!(Test-Path $ArtReport)) { throw 'Art commandlet produced no current save report.' }
     $ArtResult = Get-Content -Raw $ArtReport | ConvertFrom-Json
-    if ($ArtResult.status -ne 'saved' -or $ArtResult.generator -ne 'AlphaGame.Art.v1') {
+    if ($ArtResult.status -ne 'saved' -or $ArtResult.generator -ne 'AlphaGame.Art.v1' -or
+        $ArtResult.material -ne '/Game/Art/Materials/M_AlphaSurface' -or
+        $ArtResult.effects_material -ne '/Game/Art/Materials/M_AlphaEffect') {
         throw "Art asset generation did not finish: $ArtReport"
     }
-    foreach ($ArtPackage in @('Materials/M_AlphaSurface', 'Textures/T_ForgeDetail', 'Textures/T_ForgeNormal_N')) {
+    foreach ($ArtPackage in @('Materials/M_AlphaSurface', 'Materials/M_AlphaEffect', 'Textures/T_ForgeDetail', 'Textures/T_ForgeNormal_N')) {
         if (!(Test-Path (Join-Path $ProjectRoot ("Content/Art/$ArtPackage.uasset")))) {
             throw "Art package is missing after save: $ArtPackage"
         }

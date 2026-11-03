@@ -27,6 +27,20 @@ void AAlphaCombatCamera::SetShakeStrength(float Value)
     if (FMath::IsFinite(Value)) ShakeStrength = FMath::Clamp(Value, 0.f, 1.f);
 }
 
+void AAlphaCombatCamera::KickAt(UWorld* World, const FVector& Location, float Strength)
+{
+    if (!World || World->GetNetMode() == NM_DedicatedServer || Location.ContainsNaN()
+        || !FMath::IsFinite(Strength)) return;
+    for (TActorIterator<AAlphaCombatCamera> It(World); It; ++It)
+    {
+        APlayerController* Player = Cast<APlayerController>(It->GetOwner());
+        if (!Player || !Player->IsLocalController()) continue;
+        const float Distance = FVector::Distance(It->SmoothedFocus, Location);
+        const float Attenuation = 1.f - FMath::Clamp(Distance / 2200.f, 0.f, 1.f);
+        It->Impact = FMath::Max(It->Impact, .2f * FMath::Clamp(Strength, 0.f, 1.f) * Attenuation);
+    }
+}
+
 void AAlphaCombatCamera::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);

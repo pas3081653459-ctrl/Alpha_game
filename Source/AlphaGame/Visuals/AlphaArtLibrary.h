@@ -20,6 +20,7 @@ public:
     UAlphaArtLibrary();
     UStaticMesh* GetMesh(EAlphaPrimitive Shape) const;
     UMaterialInterface* GetSurface();
+    UMaterialInterface* GetEffect();
 private:
     UPROPERTY() TObjectPtr<UStaticMesh> Cube;
     UPROPERTY() TObjectPtr<UStaticMesh> Sphere;
@@ -28,12 +29,16 @@ private:
     UPROPERTY() TObjectPtr<UStaticMesh> Plane;
     UPROPERTY() TObjectPtr<UMaterialInterface> FallbackSurface;
     UPROPERTY() TObjectPtr<UMaterialInterface> GeneratedSurface;
+    UPROPERTY() TObjectPtr<UMaterialInterface> GeneratedEffect;
     bool bLookedUpSurface = false;
+    bool bLookedUpEffect = false;
 };
 
 namespace AlphaArt
 {
     ALPHAGAME_API UStaticMesh* Mesh(EAlphaPrimitive Shape);
     ALPHAGAME_API UMaterialInstanceDynamic* Material(UObject* Outer, FLinearColor Tint,
-        float Metallic = 0.f, float Roughness = .6f, float Glow = 0.f);
+        float Metallic = 0.f, float Roughness = .6f, float Glow = 0.f, float AnimeShade = .35f);
+    /** Unlit opaque energy effects when generated; visible lit-color fallback otherwise. */
+    ALPHAGAME_API UMaterialInstanceDynamic* EffectMaterial(UObject* Outer, FLinearColor Tint, float Glow = 1.f);
 }

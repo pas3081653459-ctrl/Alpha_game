@@ -1,5 +1,6 @@
 #include "World/AlphaGameMode.h"
 #include "World/AlphaGameState.h"
+#include "World/AlphaBreakableProp.h"
 #include "World/AlphaPlayerController.h"
 #include "Characters/AlphaCharacter.h"
 #include "Characters/AlphaEnemy.h"
@@ -413,6 +414,7 @@ void AAlphaGameMode::RestartPrototypeRound()
     if (!HasAuthority()) return;
     GetWorldTimerManager().ClearTimer(WaveTimer);
     ClearEncounterActors();
+    for (TActorIterator<AAlphaBreakableProp> It(GetWorld()); It; ++It) It->ResetForRound();
     if (AAlphaGameState* State = GetGameState<AAlphaGameState>())
     {
         State->Wave = 0;

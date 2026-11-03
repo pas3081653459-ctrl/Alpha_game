@@ -58,8 +58,28 @@ inline ComboAttackData GetComboAttack(int Stage, bool Airborne)
     };
     const int SafeStage = std::clamp(Stage, 1, 5);
     ComboAttackData Result = Steps[SafeStage - 1];
-    if (Airborne && SafeStage == 5) Result.VerticalOffset = -30.;
+    if (Airborne)
+    {
+        // Downward crescent, reverse wheel, lifting cross, diving thrust, meteor.
+        // Broad lower coverage reaches grounded enemies without granting invulnerability.
+        const ComboAttackData AirSteps[] = {
+            {.09, .28, 1.00, 1.00, 190., 85., 155., -85.},
+            {.10, .30, 1.10, 1.05, 200., 105., 160., -85.},
+            {.13, .34, 1.15, 1.30, 180., 95., 185., -65.},
+            {.09, .28, 1.20, 1.10, 255., 65., 165., -100.},
+            {.20, .48, 1.70, 1.80, 190., 120., 190., -115.},
+        };
+        Result = AirSteps[SafeStage - 1];
+    }
     return Result;
+}
+
+// The impact is local to a real floor contact, never an unbounded aerial laser.
+inline double GroundImpactRadius(bool Airborne) { return Airborne ? 285. : 235.; }
+inline double GroundImpactTraceDepth(bool Airborne) { return Airborne ? 520. : 210.; }
+inline double ComboLiftSpeed(int Stage, bool Airborne)
+{
+    return Airborne && std::clamp(Stage, 1, 5) == 3 ? 390. : 0.;
 }
 
 inline bool CanCast(int Slot, double Energy, bool ActionAllowed, bool CooldownReady)

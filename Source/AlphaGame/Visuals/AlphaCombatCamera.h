@@ -15,6 +15,8 @@ public:
     AAlphaCombatCamera();
     virtual void Tick(float DeltaSeconds) override;
     void SetShakeStrength(float Value);
+    /** Local impact feedback, still governed by CameraShakeStrength. */
+    static void KickAt(UWorld* World, const FVector& Location, float Strength);
 private:
     FVector SmoothedFocus = FVector(0, 70, 120);
     double SmoothedDistance = 2800.;

@@ -59,15 +59,27 @@ inline bool ShouldUseSkill(int Hero, int Slot, double Distance, bool HasEnemy,
     return Distance <= Ranges[Hero][Slot] && AlphaPlayerControl::CanCast(Slot, Energy, CanAct, Cooldown <= 0.);
 }
 
+inline double GetSkillRadius(int Hero, int Slot)
+{
+    if (Hero < 0 || Hero > 2 || Slot < 0 || Slot > 2) return 0.;
+    constexpr double Radius[3][3] = {{100., 110., 180.}, {85., 210., 300.}, {420., 310., 460.}};
+    return Radius[Hero][Slot];
+}
+
+inline double GetSkillReach(int Hero, int Slot)
+{
+    if (Hero < 0 || Hero > 2 || Slot < 0 || Slot > 2) return 0.;
+    constexpr double Reach[3][3] = {{110., 240., 360.}, {200., 0., 0.}, {0., 0., 0.}};
+    return Reach[Hero][Slot];
+}
+
 // Target-center coverage of the same sphere/segment-sphere skill shapes used
 // by the ability component. This prevents depth-misaligned cooldown waste.
 inline bool InSkillFootprint(int Hero, int Slot, double Forward, double Depth, double Height)
 {
     if (Hero < 0 || Hero > 2 || Slot < 0 || Slot > 2 || !std::isfinite(Forward)
         || !std::isfinite(Depth) || !std::isfinite(Height)) return false;
-    const double Reach[3][3] = {{110., 240., 360.}, {200., 0., 0.}, {0., 0., 0.}};
-    const double Radius[3][3] = {{100., 110., 180.}, {85., 210., 300.}, {420., 310., 460.}};
-    const double SegmentX = std::clamp(Forward, 0.0, Reach[Hero][Slot]);
-    return std::hypot(Forward - SegmentX, Depth, Height) <= Radius[Hero][Slot];
+    const double SegmentX = std::clamp(Forward, 0.0, GetSkillReach(Hero, Slot));
+    return std::hypot(Forward - SegmentX, Depth, Height) <= GetSkillRadius(Hero, Slot);
 }
 }

@@ -29,4 +29,15 @@ inline double EffectEnvelope(double Age, double Lifetime)
     const double Remaining = 1.0 - std::clamp(Age / Lifetime, 0.0, 1.0);
     return Remaining * Remaining;
 }
+// Normalized lifetime ballistic fragment height. Fragments stop above their
+// confirmed contact plane and never become simulated collision geometry.
+inline double DebrisHeight(double Start, double Lift, double Gravity, double Progress)
+{
+    if (!std::isfinite(Start) || !std::isfinite(Lift) || !std::isfinite(Gravity)
+        || !std::isfinite(Progress)) return 2.0;
+    const double T = std::clamp(Progress, 0.0, 1.0);
+    return std::clamp(std::clamp(Start, 2.0, 600.0) + std::clamp(Lift, 0.0, 600.0) * T
+        - std::clamp(Gravity, 0.0, 1200.0) * T * T, 2.0, 1200.0);
+}
+
 }

@@ -101,15 +101,24 @@ void ComboTests()
             "combo damage and poise scale follow the five-stage contract");
         Check(Ground.Reach > 0 && Ground.HalfWidth > 0 && Ground.HalfHeight > 0,
             "each stage has a nonempty attack volume");
-        Check(Near(Air.Windup, Ground.Windup) && Near(Air.Duration, Ground.Duration)
-            && Near(Air.DamageScale, Ground.DamageScale) && Near(Air.PoiseScale, Ground.PoiseScale),
-            "airborne attacks preserve stage timing and power");
-        Check(Near(Air.Reach, Ground.Reach) && Near(Air.HalfWidth, Ground.HalfWidth) && Near(Air.HalfHeight, Ground.HalfHeight),
-            "airborne attacks retain intended horizontal and height volume");
-        Check(Index == 5 ? Near(Air.VerticalOffset, -30) : Near(Air.VerticalOffset, Ground.VerticalOffset),
-            "only air finisher lowers its hit volume");
+        Check(Air.Windup > 0 && Air.Duration > Air.Windup && Air.Duration <= Ground.Duration,
+            "air variants preserve usable recovery without outlasting the hold cap");
+        Check(Near(Air.DamageScale, Ground.DamageScale) && Near(Air.PoiseScale, Ground.PoiseScale),
+            "air variants change coverage rather than secretly multiplying damage");
+        Check(Air.Reach >= Ground.Reach && Air.HalfHeight > Ground.HalfHeight && Air.VerticalOffset < Ground.VerticalOffset,
+            "each air variant gains distinct downward coverage and sufficient forward reach");
+        Check(Air.VerticalOffset - Air.HalfHeight <= -240.,
+            "air attack volume reaches grounded enemies from normal jump height");
+        Check(AlphaPlayerControl::ComboLiftSpeed(Index, true) == (Index == 3 ? 390. : 0.),
+            "only third aerial stage lifts ordinary enemies");
+        Check(AlphaPlayerControl::ComboLiftSpeed(Index, false) == 0.,
+            "ground combo cannot acquire an unintended aerial launcher");
         TotalDuration += Ground.Duration;
     }
+    Check(AlphaPlayerControl::GroundImpactRadius(true) > AlphaPlayerControl::GroundImpactRadius(false)
+        && AlphaPlayerControl::GroundImpactRadius(true) <= 300., "aerial meteor has stronger bounded area coverage");
+    Check(AlphaPlayerControl::GroundImpactTraceDepth(true) <= 520.
+        && AlphaPlayerControl::GroundImpactTraceDepth(false) <= 210., "floor probing cannot reach arbitrary floors below the arena");
     Check(GetComboAttack(5, false).DamageScale > GetComboAttack(1, false).DamageScale,
         "finisher is stronger than opening strike");
     Check(GetComboAttack(4, false).Reach > GetComboAttack(1, false).Reach,

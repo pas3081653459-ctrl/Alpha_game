@@ -132,6 +132,19 @@ int main()
     CameraTests();
     BlendTests();
     EnvelopeTests();
+    using AlphaPresentation::DebrisHeight;
+    Check(Near(DebrisHeight(8, 100, 250, 0), 8), "debris starts on surface contact");
+    Check(DebrisHeight(8, 100, 250, .2) > 8, "fragment rises during initial impulse");
+    Check(Near(DebrisHeight(8, 100, 250, 1), 2), "fragment ends above contact plane");
+    Check(Near(DebrisHeight(8, 100, 250, -1), 8), "negative fragment time clamps");
+    Check(Near(DebrisHeight(8, 100, 250, 2), 2), "expired fragment time clamps");
+    for (double Invalid : {std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity()})
+        Check(Near(DebrisHeight(8, Invalid, 250, .5), 2), "invalid fragment data stays at surface");
+    for (int Step = 0; Step <= 20; ++Step)
+    {
+        const double Height = DebrisHeight(8, 140, 250, Step / 20.0);
+        Check(std::isfinite(Height) && Height >= 2 && Height <= 1200, "fragment remains finite above surface");
+    }
     std::cout << "Portable presentation rules: " << (Checks - Failures) << '/' << Checks << " checks passed\n";
     std::cout << "These calculations do not validate Unreal rendering, material generation, cooking or performance.\n";
     return Failures == 0 ? 0 : 1;

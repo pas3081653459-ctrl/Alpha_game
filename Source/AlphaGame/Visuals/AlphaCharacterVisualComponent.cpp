@@ -1,6 +1,9 @@
 #include "Visuals/AlphaCharacterVisualComponent.h"
 
 #include "Visuals/AlphaArtLibrary.h"
+#include "Visuals/AlphaCombatCamera.h"
+#include "Combat/AlphaCombatComponent.h"
+#include "Abilities/AlphaAbilityComponent.h"
 #include "Visuals/AlphaCombatEffect.h"
 #include "Characters/AlphaCharacter.h"
 #include "Rules/PlayerControlRules.h"
@@ -24,6 +27,11 @@ UAlphaCharacterVisualComponent::UAlphaCharacterVisualComponent()
 void UAlphaCharacterVisualComponent::BeginPlay()
 {
     Super::BeginPlay();
+    if (AAlphaCharacter* Character = Cast<AAlphaCharacter>(GetOwner()))
+    {
+        Character->GetCombatComponent()->OnGroundImpact.AddDynamic(this, &UAlphaCharacterVisualComponent::ShowGroundImpact);
+        Character->GetAbilityComponent()->OnSkillActivated.AddDynamic(this, &UAlphaCharacterVisualComponent::PlaySkill);
+    }
     if (GetWorld() && GetWorld()->GetNetMode() != NM_DedicatedServer)
     {
         GetWorld()->GetTimerManager().SetTimer(TickBudgetTimer, this,
@@ -33,6 +41,11 @@ void UAlphaCharacterVisualComponent::BeginPlay()
 
 void UAlphaCharacterVisualComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    if (AAlphaCharacter* Character = Cast<AAlphaCharacter>(GetOwner()))
+    {
+        Character->GetCombatComponent()->OnGroundImpact.RemoveDynamic(this, &UAlphaCharacterVisualComponent::ShowGroundImpact);
+        Character->GetAbilityComponent()->OnSkillActivated.RemoveDynamic(this, &UAlphaCharacterVisualComponent::PlaySkill);
+    }
     if (GetWorld()) GetWorld()->GetTimerManager().ClearTimer(TickBudgetTimer);
     ClearParts();
     Super::EndPlay(EndPlayReason);
@@ -71,6 +84,7 @@ USceneComponent* UAlphaCharacterVisualComponent::AddPivot(FName Name, USceneComp
 UMaterialInstanceDynamic* UAlphaCharacterVisualComponent::MakeMaterial(FLinearColor Tint, float Metallic, float Roughness, float Glow)
 {
     UMaterialInstanceDynamic* Material = AlphaArt::Material(this, Tint, Metallic, Roughness, Glow);
+    if (Material) Material->SetScalarParameterValue(TEXT("AnimeShade"), 1.f);
     Materials.Add(Material);
     BaseTints.Add(Tint);
     BaseGlows.Add(Glow);
@@ -128,13 +142,15 @@ void UAlphaCharacterVisualComponent::RefreshAppearance(int32 Hero, bool bEnemy, 
     const FLinearColor Accent = bEnemyVisual ? FLinearColor(0.85f, 0.22f, 0.035f)
         : (HeroType == 0 ? FLinearColor(0.6f, 0.025f, 0.055f)
         : (HeroType == 1 ? FLinearColor(0.025f, 0.5f, 0.42f) : FLinearColor(0.75f, 0.52f, 0.13f)));
-    ClothMaterial = MakeMaterial(bEnemyVisual ? FLinearColor(0.095f, 0.07f, 0.06f) : Accent * 0.38f, 0.05f, 0.85f);
+    ClothMaterial = MakeMaterial(bEnemyVisual ? FLinearColor(0.095f, 0.07f, 0.06f) : Accent * 0.7f, 0.02f, 0.78f);
     MetalMaterial = MakeMaterial(FLinearColor(0.13f, 0.16f, 0.18f), 0.78f, 0.3f);
     AccentMaterial = MakeMaterial(Accent, bEnemyVisual ? 0.65f : 0.35f, 0.42f);
     FaceMaterial = MakeMaterial(bEnemyVisual ? FLinearColor(0.74f, 0.67f, 0.49f) : FLinearColor(0.7f, 0.55f, 0.37f), 0.08f, 0.7f);
     GlowMaterial = MakeMaterial(bEnemyVisual ? FLinearColor(1.0f, 0.19f, 0.02f) : Accent * 1.6f, 0.2f, 0.3f, bBossVisual ? 4.0f : 2.2f);
     BuildSilhouette();
     BuildWeapon();
+    if (!bEnemyVisual) BuildAnimeDetails();
+    SkillStartedAt = -1000.0;
     AttackStartedAt = -1000.0;
     HitUntil = PoiseUntil = -1000.0;
     bAttackCueSpawned = true;
@@ -144,12 +160,12 @@ void UAlphaCharacterVisualComponent::RefreshAppearance(int32 Hero, bool bEnemy, 
 
 void UAlphaCharacterVisualComponent::BuildSilhouette()
 {
-    // Ten-part humanoid core. Shoulder/cloth/prop additions keep each silhouette at <= 20 mesh components.
+    // Ten-part humanoid core; details are batched separately rather than one component per hair strand.
     const bool bArmored = bEnemyVisual || HeroType == 0;
     AddPart(EAlphaPrimitive::Cube, BodyRoot, FVector(0, 0, 12), FVector(bArmored ? 42 : 33, 38, 53), ClothMaterial);
     AddPart(EAlphaPrimitive::Cube, BodyRoot, FVector(0, 0, -22), FVector(29, 32, 18), MetalMaterial);
     AddPart(EAlphaPrimitive::Sphere, BodyRoot, FVector(0, 0, 63), FVector(29, 28, 32), bEnemyVisual ? MetalMaterial : FaceMaterial);
-    AddPart(EAlphaPrimitive::Cube, BodyRoot, FVector(13, 0, 64), FVector(6, 23, 23), bEnemyVisual ? FaceMaterial : MetalMaterial);
+    AddPart(EAlphaPrimitive::Cube, BodyRoot, FVector(13, 0, 64), FVector(6, 23, 23), FaceMaterial);
 
     LeftArm = AddPivot(TEXT("ArtLeftArm"), BodyRoot, FVector(0, -28, 34));
     RightArm = AddPivot(TEXT("ArtRightArm"), BodyRoot, FVector(0, 28, 34));
@@ -182,7 +198,7 @@ void UAlphaCharacterVisualComponent::BuildSilhouette()
         AddPart(EAlphaPrimitive::Cube, BodyRoot, FVector(22, 0, 14), FVector(7, 31, 37), MetalMaterial);
         ClothAccent = AddPart(EAlphaPrimitive::Cube, BodyRoot, FVector(-17, -15, -27), FVector(8, 22, 59), AccentMaterial, FRotator(-12, 0, -8));
         AddPart(EAlphaPrimitive::Cube, BodyRoot, FVector(-17, 15, -27), FVector(8, 22, 59), AccentMaterial, FRotator(-12, 0, 8));
-        AddPart(EAlphaPrimitive::Cone, BodyRoot, FVector(-5, 0, 79), FVector(29, 28, 16), MetalMaterial);
+        AddPart(EAlphaPrimitive::Cube, BodyRoot, FVector(6, 0, 75), FVector(22, 31, 5), AccentMaterial);
     }
     else if (HeroType == 1)
     {
@@ -191,7 +207,7 @@ void UAlphaCharacterVisualComponent::BuildSilhouette()
         AddPart(EAlphaPrimitive::Cube, BodyRoot, FVector(-23, 0, 15), FVector(20, 28, 33), MetalMaterial);
         AddPart(EAlphaPrimitive::Cylinder, BodyRoot, FVector(-35, -14, 17), FVector(20, 20, 8), AccentMaterial, FRotator(0, 0, 90));
         AddPart(EAlphaPrimitive::Sphere, BodyRoot, FVector(-35, -20, 17), FVector(11, 5, 11), GlowMaterial);
-        AddPart(EAlphaPrimitive::Cone, BodyRoot, FVector(-8, 0, 78), FVector(32, 29, 22), MetalMaterial, FRotator(-25, 0, 0));
+        AddPart(EAlphaPrimitive::Sphere, BodyRoot, FVector(-16, 0, 78), FVector(14, 14, 22), MetalMaterial, FRotator(-25, 0, 0));
     }
     else
     {
@@ -222,6 +238,61 @@ void UAlphaCharacterVisualComponent::BuildSilhouette()
                 FVector(FMath::Cos(Angle) * 39.0f, 0, FMath::Sin(Angle) * 39.0f), FVector(0.23f, 0.025f, 0.045f)));
         }
     }
+}
+
+void UAlphaCharacterVisualComponent::BuildAnimeDetails()
+{
+    // One instanced batch for the hair silhouette, brows and belt.
+    // Retains the low component budget while adding large readable anime shapes.
+    UInstancedStaticMeshComponent* Details = NewObject<UInstancedStaticMeshComponent>(GetOwner());
+    GetOwner()->AddInstanceComponent(Details);
+    Details->SetupAttachment(BodyRoot);
+    Details->SetMobility(EComponentMobility::Movable);
+    Details->SetStaticMesh(AlphaArt::Mesh(EAlphaPrimitive::Cube));
+    Details->SetMaterial(0, MetalMaterial);
+    Details->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    Details->SetGenerateOverlapEvents(false);
+    Details->SetCanEverAffectNavigation(false);
+    Details->SetCastShadow(false);
+    Details->SetReceivesDecals(false);
+    Details->RegisterComponent();
+    Parts.Add(Details);
+    Details->AddInstance(FTransform(FRotator::ZeroRotator, FVector(-3, 0, 76), FVector(.3f, .3f, .13f)));
+    for (int32 Index = 0; Index < 5; ++Index)
+    {
+        const float Across = (Index - 2) * 6.f;
+        Details->AddInstance(FTransform(FRotator(-25.f - Index * 5.f, 0, Across * 1.5f),
+            FVector(10, Across, 78 + FMath::Abs(Index - 2) * 2), FVector(.12f, .07f, .26f)));
+    }
+    // Side locks and graphic eyebrow lines remain visible without emissive materials.
+    for (float Side : {-1.f, 1.f})
+    {
+        Details->AddInstance(FTransform(FRotator(-15, 0, Side * 10), FVector(-4, Side * 14, 65), FVector(.14f, .07f, HeroType == 2 ? .35f : .22f)));
+        Details->AddInstance(FTransform(FRotator(0, 0, Side * -12), FVector(17, Side * 6, 68), FVector(.025f, .085f, .025f)));
+    }
+    if (HeroType == 1)
+        Details->AddInstance(FTransform(FRotator(-55, 0, 0), FVector(-22, 0, 72), FVector(.13f, .14f, .45f)));
+    Details->AddInstance(FTransform(FRotator::ZeroRotator, FVector(1, 0, -16), FVector(.34f, .35f, .05f)));
+}
+
+void UAlphaCharacterVisualComponent::PlaySkill(int32 Slot)
+{
+    if (bDefeatedVisual) return;
+    CancelAttackPresentation();
+    SkillSlot = FMath::Clamp(Slot, 0, 2);
+    SkillStartedAt = VisualTime();
+    if (SkillSlot == 2) AAlphaCombatCamera::KickAt(GetWorld(), GetOwner()->GetActorLocation(), .65f);
+    UpdateTickBudget();
+}
+
+void UAlphaCharacterVisualComponent::ShowGroundImpact(FVector Location, FVector Normal, float Radius)
+{
+    if (!GetWorld() || GetWorld()->GetNetMode() == NM_DedicatedServer) return;
+    const AAlphaCharacter* Character = Cast<AAlphaCharacter>(GetOwner());
+    const FVector Facing = Character ? Character->GetCombatComponent()->GetAttackFacing() : GetOwner()->GetActorForwardVector();
+    AAlphaCombatEffect::SpawnGroundImpact(GetWorld(), Location, Normal, Facing, Radius,
+        BaseTints.IsValidIndex(2) ? BaseTints[2] : FLinearColor::White);
+    AAlphaCombatCamera::KickAt(GetWorld(), Location, .8f);
 }
 
 void UAlphaCharacterVisualComponent::BuildWeapon()
@@ -259,6 +330,7 @@ void UAlphaCharacterVisualComponent::BuildWeapon()
 void UAlphaCharacterVisualComponent::SetDefeated(bool bNewDefeated)
 {
     RollStartedAt = -1000.0;
+    SkillStartedAt = -1000.0;
     bDefeatedVisual = bNewDefeated;
     AttackStartedAt = -1000.0;
     HitUntil = PoiseUntil = -1000.0;
@@ -349,13 +421,30 @@ void UAlphaCharacterVisualComponent::UpdateComboPose(float AttackTime)
         break;
     default: break;
     }
+    if (bComboAirborne)
+    {
+        // Downward-facing aerial variants preserve the server's downward hit volume.
+        switch (ComboStage)
+        {
+        case 1: Pose = FRotator(bPreparing ? -65.f * Phase : FMath::Lerp(-65.f, 50.f, Ease), -30.f, -15.f); break;
+        case 2: Pose = FRotator(30.f, bPreparing ? 100.f * Phase : FMath::Lerp(100.f, -110.f, Ease), 25.f); break;
+        case 3: Pose = FRotator(bPreparing ? 80.f * Phase : FMath::Lerp(80.f, -100.f, Ease), 20.f, -35.f); break;
+        case 4: Pose = FRotator(48.f, -10.f, 0); Offset = FVector(bPreparing ? -20.f : 55.f * FMath::Sin(Phase * PI), 0, -35.f); break;
+        case 5: Pose = FRotator(bPreparing ? -155.f * Phase : FMath::Lerp(-155.f, 85.f, Ease), 0, 0); Offset.Z = bPreparing ? 65.f * Phase : FMath::Lerp(65.f, -65.f, Ease); break;
+        default: break;
+        }
+    }
     WeaponRoot->SetRelativeRotation(Pose);
     WeaponRoot->SetRelativeLocation(Offset);
+    const float Strike = bPreparing ? -Phase : FMath::Sin(Phase * PI);
+    BodyRoot->SetRelativeRotation(FRotator((bComboAirborne ? 12.f : -7.f) * Strike, Pose.Yaw * .15f, bComboAirborne ? Pose.Roll * .35f : 0.f));
+    if (LeftArm) LeftArm->SetRelativeRotation(FRotator(-25.f - 35.f * Strike, 0, -20.f));
     if (RightArm) RightArm->SetRelativeRotation(FRotator(Pose.Pitch * .65f, Pose.Yaw * .4f, 0));
     if (bComboAirborne)
     {
-        if (LeftLeg) LeftLeg->SetRelativeRotation(FRotator(35, 0, 0));
-        if (RightLeg) RightLeg->SetRelativeRotation(FRotator(-15, 0, 0));
+        const float Tuck = ComboStage == 5 ? 60.f : (ComboStage == 3 ? 48.f : 35.f);
+        if (LeftLeg) LeftLeg->SetRelativeRotation(FRotator(Tuck, 0, -10.f));
+        if (RightLeg) RightLeg->SetRelativeRotation(FRotator(ComboStage == 4 ? -45.f : -15.f, 0, 10.f));
     }
     if (!bPreparing && !bAttackCueSpawned)
     {
@@ -389,6 +478,7 @@ void UAlphaCharacterVisualComponent::CancelAttackPresentation()
     AttackCue.Reset();
     ComboStage = 0;
     bComboAirborne = false;
+    SkillStartedAt = -1000.0;
     AttackStartedAt = -1000.0;
     bAttackCueSpawned = true;
     if (WeaponRoot && !bBossWindup)
@@ -504,7 +594,19 @@ void UAlphaCharacterVisualComponent::TickComponent(float DeltaTime, ELevelTick T
     if (LanternRing) LanternRing->AddLocalRotation(FRotator(DeltaTime * 16.0f, 0, 0));
 
     const float AttackTime = static_cast<float>(Now - AttackStartedAt);
-    if (bBossWindup)
+    const float SkillAge = static_cast<float>(Now - SkillStartedAt);
+    const float SkillDuration = SkillSlot == 2 ? .7f : .35f;
+    if (SkillAge >= 0.f && SkillAge < SkillDuration && RollAge >= .35f)
+    {
+        const float Pulse = FMath::Sin(SkillAge / SkillDuration * PI);
+        const float Pitch = HeroType == 2 ? -85.f : (HeroType == 1 ? 35.f : -40.f);
+        WeaponRoot->SetRelativeRotation(FRotator(Pitch * Pulse, (HeroType == 1 ? -75.f : 20.f) * Pulse, 0));
+        WeaponRoot->SetRelativeLocation(FVector(25.f * Pulse, 0, (SkillSlot == 2 ? 50.f : 15.f) * Pulse));
+        BodyRoot->SetRelativeRotation(FRotator(-12.f * Pulse, 0, 0));
+        if (LeftArm) LeftArm->SetRelativeRotation(FRotator(-100.f * Pulse, 0, -25.f * Pulse));
+        if (RightArm) RightArm->SetRelativeRotation(FRotator(Pitch * Pulse, 0, 20.f * Pulse));
+    }
+    else if (bBossWindup)
     {
         const float Raise = FMath::InterpEaseInOut(0.0f, 1.0f, BossWindupProgress, 2.0f);
         WeaponRoot->SetRelativeRotation(FRotator(-95.0f * Raise, BossAttackType == 1 ? -50.0f * Raise : 0.0f, 0));

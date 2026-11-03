@@ -6,10 +6,10 @@
 
 | 检查 | 结果 | 能证明什么 |
 |---|---|---|
-| `python3 Scripts/check_project.py` | 通过 | 工程描述、40 个必要文件、22 个头文件、输入与本地 include、入口配置；发现 30 项不同的 UE 测试名称 |
+| `python3 Scripts/check_project.py` | 通过 | 工程描述、42 个必要文件、23 个头文件、输入与本地 include、入口配置；发现 35 项不同的 UE 测试名称 |
 | `python3 Scripts/run_rules_tests.py` | 222/222 通过 | 实际共享规则在严格 C++17 编译器中的行为 |
 | `python3 Scripts/run_rules_tests.py --sanitize` | 222/222 通过，无 UBSan 报告 | 同一规则的未定义行为检查 |
-| `python3 Scripts/run_presentation_tests.py` / `--sanitize` | 各270/270通过 | 实际用于镜头距离、平滑、效果衰减的纯计算 |
+| `python3 Scripts/run_presentation_tests.py` / `--sanitize` | 各298/298通过 | 实际用于镜头距离、平滑、效果衰减的纯计算 |
 | Python 脚本语法检查 | 通过 | 当前两项 Python 检查脚本可解析 |
 | 新增源码与文档文本检查 | 通过 | UTF-8、行尾空白和冲突标记 |
 | `git diff --check` | 通过 | 当前跟踪变更未发现空白错误；新增未跟踪文件另做逐文件检查 |
@@ -31,7 +31,7 @@
 
 ## UE 测试：源码已写，全部未执行
 
-当前共 30 项：Combat 8 项、Combo 2 项、Movement 1 项、Coop 5 项、Abilities 5 项、Encounter 2 项、Companion 6 项、Party 1 项。
+当前共 35 项：Combat 8 项、Combo 6 项、Movement 1 项、Coop 5 项、Abilities 5 项、Encounter 2 项、Companion 6 项、Party 1 项、Environment 1 项。
 
 包括伤害/友伤/死亡重置/无敌/救起/硬直、救援恢复/独占/受击/距离/断线/遮挡、技能冷却/非法输入/合作资源，以及 Boss 攻击区域/阶段/人数缩放/防止重复配置回血。
 
@@ -44,7 +44,7 @@
 - 当前 Linux 云机器没有 Unreal Editor、UnrealBuildTool 或 Windows 工具链。没有生成 EXE，没有运行图形、物理命中或三台真实 Windows 设备联机。
 - 正式手工模型、骨骼动画、声音和完整关卡尚未制作；已有程序化造型与网格技能效果。完整主材质 `.uasset` 仍需在引擎运行 Art 生成步骤。
 
-下一执行入口是 README 的 Windows 构建命令。先取得真实 UHT/UBT 结果，再运行 30 项 UE 测试与完整单人/三机流程，按 `ACCEPTANCE.md` 留存日志。引擎验收通过后，按 `PROJECT_PLAN.md` 自动进入工坊垂直切片的动作与美术制作，避免基于未经运行的接口批量生产内容。
+下一执行入口是 README 的 Windows 构建命令。先取得真实 UHT/UBT 结果，再运行 35 项 UE 测试与完整单人/三机流程，按 `ACCEPTANCE.md` 留存日志。引擎验收通过后，按 `PROJECT_PLAN.md` 自动进入工坊垂直切片的动作与美术制作，避免基于未经运行的接口批量生产内容。
 
 ## 美术增量验证
 
@@ -86,3 +86,13 @@
 用户最新 Mac UE5.6 日志确认 UHT 已通过，随后 C++ 报告 `AlphaComboTests.cpp` 直接调用受保护 `UAlphaCombatComponent::TickComponent`。已删除这次冗余手动调用：前面的公开 `ResetVitals()` 已清除本次离地资格锁，测试仍验证同次离地不能续空、公开重置后可重新开始以及受击恢复重力。没有扩大生产接口访问权限、删除断言或修改全局帧计数器。其余测试中的救援组件 Tick 声明为 public，不属于同类错误。
 
 修复后的完整 Mac 构建仍待本机重跑；当前云环境无法执行 Unreal 编译。
+
+## 动漫角色、空中变招与冲击增量
+
+- 当前严格 C++17 与 UBSan 四套各自通过：战斗222、视觉298、同伴784、控制1174，总2478项；Python材质脚本语法、工程一致性及diff格式检查通过。
+- 动漫角色细节与姿态、外表面双色亮带、九技能可视范围、真实地面终段冲击已接入；技能权威判定、AI及特效共用半径/距离表。
+- 空中变招向下覆盖并可挑空普通敌人，第5段地板检测/LOS及统一去重；8个可破坏道具复制状态并在重开恢复。
+- 新增5项UE测试源码：空中命中地面目标、终段真实地板/无地板/侧墙三种情况及环境道具范围/遮挡/来源/重开。当前35项UE测试尚未执行。
+- 视觉预算现在每效果两批次、最多24片外层+24片亮带，共48实例，单世界最多24效果；这不是实测draw call或帧率。
+- 两材质与两纹理的实际生成、UE5.6完整编译、渲染、输入、网络与打包仍未执行。用户此前Mac日志仅证明旧版UHT通过，不能替代本轮构建。
+- 角色仍为程序化构件与动画；无正式手工骨骼模型、配套骨骼动画或完整音效。本轮不能标记完整美术制作完成。详见 `ANIME_COMBAT.md`。

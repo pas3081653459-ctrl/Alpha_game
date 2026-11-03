@@ -67,7 +67,7 @@ private:
     void ServerUseSkill(int32 Slot);
 
     UFUNCTION(NetMulticast, Unreliable)
-    void MulticastSkill(int32 Archetype, int32 Slot, bool bUltimate);
+    void MulticastSkill(int32 Archetype, int32 Slot, FVector Origin, FVector Facing);
 
     UFUNCTION(NetMulticast, Unreliable)
     void MulticastCoopCue(FVector Location);

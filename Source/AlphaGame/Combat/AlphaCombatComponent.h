@@ -11,6 +11,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FAlphaHitEvent, float, ActualDamage
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FAlphaHitConfirmedEvent, AActor*, Target, bool, bPoiseBroken);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FAlphaComboAttackEvent, int32, Stage, bool, bAirborne);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FAlphaAirComboEvent, bool, bHolding);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FAlphaGroundImpactEvent, FVector, Location, FVector, Normal, float, Radius);
 
 /** Server-authoritative timed attacks, hit reactions, defensive windows and vitals. */
 UCLASS(ClassGroup=(AlphaGame), meta=(BlueprintSpawnableComponent))
@@ -121,6 +122,10 @@ public:
     /** Team 1 uses this event instead of OnAttack, once per accepted combo stage. */
     UPROPERTY(BlueprintAssignable, Category="Combat|Combo")
     FAlphaComboAttackEvent OnComboAttack;
+
+    /** Real floor contact at the authoritative finisher hit frame; presentation only. */
+    UPROPERTY(BlueprintAssignable, Category="Combat|Combo")
+    FAlphaGroundImpactEvent OnGroundImpact;
 
     UPROPERTY(BlueprintAssignable, Category="Combat|Combo")
     FAlphaCombatEvent OnComboFinished;
@@ -244,6 +249,9 @@ private:
 
     UFUNCTION(NetMulticast, Reliable)
     void MulticastComboFinished();
+
+    UFUNCTION(NetMulticast, Reliable)
+    void MulticastGroundImpact(FVector Location, FVector Normal, float Radius);
 
     UFUNCTION(NetMulticast, Reliable)
     void MulticastAirComboChanged(bool bHolding);

@@ -4,6 +4,8 @@ Windows 三人局域网 2.5D 合作动作闯关项目，使用 **Unreal Engine 5
 
 当前是持续开发中的程序化美术原型源码。共享规则已实际编译测试；Unreal 工程尚未在本环境编译，不能据此称为可玩版本或已生成 EXE。
 
+当前美术目标已调整为 **日本热血战斗动漫风格**：强轮廓、明亮刀光、速度线与夸张冲击。具体增量与实机验收见 [动漫战斗表现](Docs/ANIME_COMBAT.md)。
+
 ## 当前源码能力
 
 - 有限纵深工坊战场：炉心、黄铜环、管道、青瓷柱梁、灯笼与远景塔楼；固定曝光与冷暖灯光。
@@ -66,7 +68,7 @@ $Editor = 'C:\Program Files\Epic Games\UE_5.6\Engine\Binaries\Win64\UnrealEditor
 .\Scripts\Build-Windows.ps1 -EngineRoot 'C:\Program Files\Epic Games\UE_5.6' -Action Art
 ```
 
-该步骤先编译编辑器目标，再调用 `Scripts/create_art_assets.py` 导入纹理、创建参数材质，并核对本次保存报告和三个 `.uasset` 文件。`Package` 动作也会先执行该步骤。未在当前云环境运行。
+该步骤先编译编辑器目标，再调用 `Scripts/create_art_assets.py` 导入纹理、创建参数材质，并核对本次保存报告和四个 `.uasset` 文件。`Package` 动作也会先执行该步骤。未在当前云环境运行。
 
 插件已限定为编辑器用途：PythonScriptPlugin、EditorScriptingUtilities。只允许刷新带生成器标签的资产，遇到同名手工资源会停止。手工修改生成资源前应复制一份。修改后重启已经运行过游戏的编辑器，避免旧材质回退缓存。
 
@@ -118,7 +120,7 @@ python3 Scripts/run_player_control_tests.py --sanitize
 ```
 
 - 工程一致性检查通过。
-- 标准 C++17 战斗规则 **222/222 通过**、镜头/效果规则 **270/270 通过**，两套 UBSan 检查也通过；另有 AI 决策与技能体积规则 **784/784 通过**（含 UBSan），新增操作/能量规则 **1157/1157 通过**（含 UBSan）。
+- 标准 C++17 战斗规则 **222/222 通过**、镜头/效果规则 **298/298 通过**，两套 UBSan 检查也通过；另有 AI 决策与技能体积规则 **784/784 通过**（含 UBSan），新增操作/能量规则 **1174/1174 通过**（含 UBSan）。
 - 这些规则被服务端战斗、救援、技能、人数缩放和 Boss 命中实际调用。
 - `.github/workflows/portable-checks.yml` 已配置同类 CI；本轮未查询 GitHub 托管运行结果。
 
@@ -129,9 +131,9 @@ Windows 引擎环境执行 UE 自动化与打包：
 .\Scripts\Build-Windows.ps1 -EngineRoot 'C:\Program Files\Epic Games\UE_5.6' -Action Package
 ```
 
-目前有 **30 项 UE Automation 测试源码**，覆盖战斗、连招、空中取消、方向/奔跑、救援、能量、Boss、AI 同伴和队伍生命周期。脚本从源码提取完整测试名，要求本次报告中逐项成功，拒绝零测试、漏项、失败或未完成。报告位于 `Artifacts/Tests/`，Development 包位于 `Artifacts/Windows/`。
+目前有 **35 项 UE Automation 测试源码**，覆盖战斗、连招、空中取消、方向/奔跑、救援、能量、Boss、AI 同伴和队伍生命周期。脚本从源码提取完整测试名，要求本次报告中逐项成功，拒绝零测试、漏项、失败或未完成。报告位于 `Artifacts/Tests/`，Development 包位于 `Artifacts/Windows/`。
 
-**Unreal 编译、这 30 项 UE 测试、PowerShell、渲染、打包和三台 Windows 设备联机均未执行。**当前 Linux 云机器没有 Unreal Editor/UnrealBuildTool，测试结果不能替代这些门槛。
+**Unreal 编译、这 35 项 UE 测试、PowerShell、渲染、打包和三台 Windows 设备联机均未执行。**当前 Linux 云机器没有 Unreal Editor/UnrealBuildTool，测试结果不能替代这些门槛。
 
 ## 已知范围
 

@@ -1,4 +1,5 @@
 #include "World/AlphaGameState.h"
+#include "World/AlphaBreakableProp.h"
 #include "Characters/Boss/AlphaForgeBoss.h"
 #include "Visuals/AlphaArtLibrary.h"
 #include "Visuals/AlphaForgeEnvironment.h"
@@ -55,6 +56,19 @@ void AAlphaGameState::BuildPrototypeArena()
     AddCollisionBlock(FVector(0, 450, 500), FVector(30, 1, 12));
     AddCollisionBlock(FVector(-1450, 0, 500), FVector(1, 10, 12));
     AddCollisionBlock(FVector(1450, 0, 500), FVector(1, 10, 12));
+    if (HasAuthority())
+    {
+        // A small fixed set of attack-reactive crates, with no movement collision.
+        for (int32 Side : {-1, 1})
+        {
+            for (int32 Index = 0; Index < 4; ++Index)
+            {
+                GetWorld()->SpawnActor<AAlphaBreakableProp>(
+                    FVector(Side * (420.f + Index * 250.f), Index % 2 == 0 ? 260.f : -260.f, 34.f),
+                    FRotator::ZeroRotator);
+            }
+        }
+    }
     if (GetNetMode() != NM_DedicatedServer)
     {
         GetWorld()->SpawnActor<AAlphaForgeEnvironment>(FVector::ZeroVector, FRotator::ZeroRotator);

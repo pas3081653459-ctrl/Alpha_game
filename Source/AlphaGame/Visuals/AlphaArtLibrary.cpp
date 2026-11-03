@@ -45,13 +45,24 @@ UMaterialInterface* UAlphaArtLibrary::GetSurface()
     return GeneratedSurface ? GeneratedSurface.Get() : FallbackSurface.Get();
 }
 
+UMaterialInterface* UAlphaArtLibrary::GetEffect()
+{
+    if (!bLookedUpEffect)
+    {
+        bLookedUpEffect = true;
+        GeneratedEffect = LoadObject<UMaterialInterface>(nullptr,
+            TEXT("/Game/Art/Materials/M_AlphaEffect.M_AlphaEffect"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+    }
+    return GeneratedEffect ? GeneratedEffect.Get() : FallbackSurface.Get();
+}
+
 UStaticMesh* AlphaArt::Mesh(EAlphaPrimitive Shape)
 {
     return GetDefault<UAlphaArtLibrary>()->GetMesh(Shape);
 }
 
 UMaterialInstanceDynamic* AlphaArt::Material(UObject* Outer, FLinearColor Tint,
-    float Metallic, float Roughness, float Glow)
+    float Metallic, float Roughness, float Glow, float AnimeShade)
 {
     if (!Outer) return nullptr;
     UMaterialInterface* Surface = GetMutableDefault<UAlphaArtLibrary>()->GetSurface();
@@ -63,6 +74,22 @@ UMaterialInstanceDynamic* AlphaArt::Material(UObject* Outer, FLinearColor Tint,
         Instance->SetVectorParameterValue(TEXT("Color"), Tint); // Engine fallback parameter.
         Instance->SetScalarParameterValue(TEXT("Metallic"), FMath::Clamp(Metallic, 0.f, 1.f));
         Instance->SetScalarParameterValue(TEXT("Roughness"), FMath::Clamp(Roughness, .05f, 1.f));
+        Instance->SetScalarParameterValue(TEXT("Glow"), FMath::Clamp(Glow, 0.f, 8.f));
+        Instance->SetScalarParameterValue(TEXT("AnimeShade"), FMath::Clamp(AnimeShade, 0.f, 1.f));
+    }
+    return Instance;
+}
+
+UMaterialInstanceDynamic* AlphaArt::EffectMaterial(UObject* Outer, FLinearColor Tint, float Glow)
+{
+    if (!Outer) return nullptr;
+    UMaterialInterface* Surface = GetMutableDefault<UAlphaArtLibrary>()->GetEffect();
+    if (!Surface) return nullptr;
+    UMaterialInstanceDynamic* Instance = UMaterialInstanceDynamic::Create(Surface, Outer);
+    if (Instance)
+    {
+        Instance->SetVectorParameterValue(TEXT("Tint"), Tint);
+        Instance->SetVectorParameterValue(TEXT("Color"), Tint);
         Instance->SetScalarParameterValue(TEXT("Glow"), FMath::Clamp(Glow, 0.f, 8.f));
     }
     return Instance;

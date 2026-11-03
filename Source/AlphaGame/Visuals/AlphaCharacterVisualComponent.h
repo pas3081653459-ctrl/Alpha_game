@@ -49,6 +49,11 @@ private:
     UMaterialInstanceDynamic* MakeMaterial(FLinearColor Tint, float Metallic, float Roughness, float Glow = 0.0f);
     void BuildSilhouette();
     void BuildWeapon();
+    void BuildAnimeDetails();
+    UFUNCTION()
+    void PlaySkill(int32 Slot);
+    UFUNCTION()
+    void ShowGroundImpact(FVector Location, FVector Normal, float Radius);
     void ClearParts();
     void UpdateTickBudget();
     void ApplyMaterialState(float HitFlash, float PoiseFlash);
@@ -111,6 +116,8 @@ private:
     double PoiseUntil = -1000.0;
     double LastSprintCueAt = -1000.0;
     double RollStartedAt = -1000.0;
+    double SkillStartedAt = -1000.0;
+    int32 SkillSlot = 0;
     float AttackWindup = 0.12f;
     float AttackDuration = 0.3f;
     float LastHitFlash = -1.0f;

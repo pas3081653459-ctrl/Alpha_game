@@ -3,6 +3,7 @@
 #include "Visuals/AlphaArtLibrary.h"
 #include "Rules/PresentationRules.h"
 #include "Rules/PlayerControlRules.h"
+#include "Rules/CompanionRules.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Engine/World.h"
@@ -18,7 +19,7 @@ int32 EffectPriority(EAlphaEffectType Type)
     if (Type == EAlphaEffectType::Sprint) return 0;
     if (Type == EAlphaEffectType::Revive) return 4;
     if (Type == EAlphaEffectType::Hit || Type == EAlphaEffectType::Poise) return 3;
-    if (Type == EAlphaEffectType::Coop || Type == EAlphaEffectType::Ultimate) return 2;
+    if (Type == EAlphaEffectType::Coop || Type == EAlphaEffectType::Ultimate || Type == EAlphaEffectType::GroundImpact) return 2;
     return 1;
 }
 }
@@ -37,6 +38,14 @@ AAlphaCombatEffect::AAlphaCombatEffect()
     Instances->SetCanEverAffectNavigation(false);
     Instances->SetCastShadow(false);
     Instances->SetReceivesDecals(false);
+    CoreInstances = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("BrightCoreInstances"));
+    CoreInstances->SetupAttachment(Instances);
+    CoreInstances->SetMobility(EComponentMobility::Movable);
+    CoreInstances->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    CoreInstances->SetGenerateOverlapEvents(false);
+    CoreInstances->SetCanEverAffectNavigation(false);
+    CoreInstances->SetCastShadow(false);
+    CoreInstances->SetReceivesDecals(false);
 }
 
 AAlphaCombatEffect* AAlphaCombatEffect::Spawn(UWorld* World, const FVector& Location,
@@ -50,6 +59,34 @@ AAlphaCombatEffect* AAlphaCombatEffect::SpawnCombo(UWorld* World, const FVector&
 {
     if (Stage < 1 || Stage > 5) return nullptr;
     return SpawnInternal(World, Location, Forward, EAlphaEffectType::Combo, Color, false, Stage, bAirborne);
+}
+
+AAlphaCombatEffect* AAlphaCombatEffect::SpawnSkill(UWorld* World, const FVector& Location,
+    const FVector& Forward, int32 Archetype, int32 Slot, FLinearColor Color)
+{
+    if (Archetype < 0 || Archetype > 2 || Slot < 0 || Slot > 2) return nullptr;
+    return SpawnInternal(World, Location, Forward, EAlphaEffectType::Ultimate, Color,
+        Slot == 2, 10 + Archetype * 3 + Slot, false);
+}
+
+AAlphaCombatEffect* AAlphaCombatEffect::SpawnGroundImpact(UWorld* World, const FVector& Location,
+    const FVector& Normal, const FVector& Forward, float Radius, FLinearColor Color)
+{
+    if (Normal.ContainsNaN() || Normal.IsNearlyZero() || !FMath::IsFinite(Radius) || Radius <= 0.0f) return nullptr;
+    AAlphaCombatEffect* Effect = SpawnInternal(World, Location + Normal.GetSafeNormal() * 2.0f,
+        Forward, EAlphaEffectType::GroundImpact, Color, true, 0, false);
+    if (!Effect) return nullptr;
+    const FVector Up = Normal.GetSafeNormal();
+    FVector Tangent = FVector::VectorPlaneProject(Forward, Up).GetSafeNormal();
+    if (Tangent.IsNearlyZero()) Tangent = FVector::CrossProduct(Up, FVector::RightVector).GetSafeNormal();
+    Effect->SetActorRotation(FRotationMatrix::MakeFromXZ(Tangent, Up).Rotator());
+    Effect->Instances->ClearInstances();
+    Effect->CoreInstances->ClearInstances();
+    Effect->Pieces.Reset();
+    Effect->ConfigureGroundImpact(FMath::Clamp(Radius, 20.0f, 600.0f));
+    Effect->SetLifeSpan(Effect->Duration + .2f);
+    Effect->UpdatePieces(0.0f);
+    return Effect;
 }
 
 AAlphaCombatEffect* AAlphaCombatEffect::SpawnInternal(UWorld* World, const FVector& Location,
@@ -109,15 +146,28 @@ void AAlphaCombatEffect::Configure(EAlphaEffectType InType, FLinearColor Color, 
     EffectType = InType;
     Pieces.Reserve(MaxInstances);
     Instances->SetStaticMesh(AlphaArt::Mesh(EAlphaPrimitive::Cube));
+    CoreInstances->SetStaticMesh(Instances->GetStaticMesh());
     if (!Instances->GetStaticMesh()) return;
     BaseTint = bEmpowered ? FMath::Lerp(Color, FLinearColor(0.85f, 0.95f, 1.0f), 0.4f) : Color;
     // Limited emissive intensity avoids drowning out the boss's red/yellow attack telegraphs.
     PeakGlow = bEmpowered ? 1.8f : 1.1f;
-    EffectMaterial = AlphaArt::Material(this, BaseTint, 0.0f, 0.45f, PeakGlow);
+    EffectMaterial = AlphaArt::EffectMaterial(this, BaseTint, PeakGlow);
+    CoreMaterial = AlphaArt::EffectMaterial(this, FMath::Lerp(BaseTint, FLinearColor::White, .82f), PeakGlow * 1.5f);
+    if (CoreMaterial) CoreInstances->SetMaterial(0, CoreMaterial);
     if (EffectMaterial) Instances->SetMaterial(0, EffectMaterial);
 
+    if (EffectType == EAlphaEffectType::Ultimate && Stage >= 10)
+    {
+        ConfigureSkill((Stage - 10) / 3, (Stage - 10) % 3);
+        SetLifeSpan(Duration + .2f);
+        UpdatePieces(0.0f);
+        return;
+    }
     switch (EffectType)
     {
+    case EAlphaEffectType::GroundImpact:
+        ConfigureGroundImpact(100.0f);
+        break;
     case EAlphaEffectType::Combo:
         ConfigureCombo(Stage, bAirborne);
         break;
@@ -241,7 +291,7 @@ void AAlphaCombatEffect::ConfigureCombo(int32 Stage, bool bAirborne)
     {
         // A narrow thrust rather than a wide slash; all pieces stay inside the
         // shared forward box and remain still in local space after release.
-        AddBeam(FVector(12, -8, Z), FVector(Reach - 10, -8, Z), 5.0f);
+        AddBeam(FVector(12, -8, Z + (bAirborne ? Height * .45f : 0)), FVector(Reach - 10, -8, Z - (bAirborne ? Height * .45f : 0)), 5.0f);
         AddBeam(FVector(28, 8, Z - 10), FVector(Reach - 30, 8, Z - 10), 2.5f);
         AddBeam(FVector(Reach - 45, -18, Z - 12), FVector(Reach - 12, -8, Z), 3.0f);
         AddBeam(FVector(Reach - 45, 2, Z + 12), FVector(Reach - 12, -8, Z), 3.0f);
@@ -249,22 +299,16 @@ void AAlphaCombatEffect::ConfigureCombo(int32 Stage, bool bAirborne)
     }
     if (Stage == 5)
     {
-        // Ground/air finishers both strike a finite box. This local down-pulse
-        // follows that box instead of projecting a full circle around the pawn.
-        const float Radius = FMath::Min(Width * .7f, Reach * .3f);
-        const float Center = Reach * .5f;
+        // Descending blade streaks only: an actual floor explosion is emitted
+        // separately from a confirmed server contact, never at a floating pawn.
         const float Bottom = Z - Height * .7f;
-        for (int32 Index = 0; Index < 16; ++Index)
+        for (int32 Index = 0; Index < 12; ++Index)
         {
-            const float A = Index * 2.0f * PI / 16.0f;
-            const float B = (Index + 1) * 2.0f * PI / 16.0f;
-            AddBeam(FVector(Center + FMath::Cos(A) * Radius, FMath::Sin(A) * Radius, Bottom),
-                FVector(Center + FMath::Cos(B) * Radius, FMath::Sin(B) * Radius, Bottom), 4.0f);
-        }
-        for (int32 Index = 0; Index < 4; ++Index)
-        {
-            const float X = Center - 24.0f + Index * 16.0f;
-            AddBeam(FVector(X, -8, Z + Height * .65f), FVector(X + 8, -8, Bottom + 8), 4.0f);
+            const float X = Reach * .3f + (Index % 4) * Reach * .12f;
+            const float Side = (Index / 4 - 1) * Width * .4f;
+            AddBeam(FVector(X - 20, Side, Z + Height * .7f),
+                FVector(X + 15, Side, Bottom), Index % 4 == 1 ? 9.0f : 4.0f);
+            Pieces.Last().DelayFraction = Index / 12.0f * .18f;
         }
         return;
     }
@@ -282,13 +326,99 @@ void AAlphaCombatEffect::ConfigureCombo(int32 Stage, bool bAirborne)
         }
         else
         {
-            Start = FVector(Reach * .45f + FMath::Cos(A) * Reach * .43f, FMath::Sin(A) * Width * .8f, Z);
-            End = FVector(Reach * .45f + FMath::Cos(B) * Reach * .43f, FMath::Sin(B) * Width * .8f, Z);
+            Start = FVector(Reach * .45f + FMath::Cos(A) * Reach * .43f, FMath::Sin(A) * Width * .8f, Z + (bAirborne ? FMath::Sin(A) * Height * .6f : 0));
+            End = FVector(Reach * .45f + FMath::Cos(B) * Reach * .43f, FMath::Sin(B) * Width * .8f, Z + (bAirborne ? FMath::Sin(B) * Height * .6f : 0));
         }
-        AddBeam(Start, End, Stage == 3 ? 4.0f : 3.5f);
+        AddBeam(Start, End, Stage == 3 ? 9.0f : 8.0f);
         // A moving trail reads the reverse cut without changing hit detection.
         if (!Pieces.IsEmpty()) Pieces.Last().DelayFraction = static_cast<float>(Index) / Segments * .3f;
     }
+}
+
+void AAlphaCombatEffect::ConfigureSkill(int32 Archetype, int32 Slot)
+{
+    // Mirrors the server capsule/sphere radii in AffectEnemies. Cosmetic rims
+    // remain strictly inside those footprints; they are not ground telegraphs.
+    const float Radius = static_cast<float>(AlphaCompanionRules::GetSkillRadius(Archetype, Slot));
+    const float Reach = static_cast<float>(AlphaCompanionRules::GetSkillReach(Archetype, Slot));
+    Duration = Slot == 2 ? .7f : .42f;
+    if (Archetype == 0)
+    {
+        // Forward crescent cleave; protection burst is visibly shorter.
+        for (int32 Index = 0; Index < 16; ++Index)
+        {
+            const float A = FMath::Lerp(-1.25f, 1.25f, Index / 16.0f);
+            const float B = FMath::Lerp(-1.25f, 1.25f, (Index + 1) / 16.0f);
+            AddBeam(FVector(Reach + FMath::Cos(A) * Radius * .85f, FMath::Sin(A) * Radius * .85f, 0),
+                FVector(Reach + FMath::Cos(B) * Radius * .85f, FMath::Sin(B) * Radius * .85f, 0),
+                Slot == 2 ? 12.0f : 7.0f);
+            Pieces.Last().DelayFraction = Index / 16.0f * .2f;
+        }
+        for (int32 Index = 0; Index < 6; ++Index)
+            AddBeam(FVector(Reach * .15f, (Index - 2.5f) * Radius * .12f, -15),
+                FVector(Reach * .9f, (Index - 2.5f) * Radius * .12f, 10), 3.0f);
+    }
+    else if (Archetype == 1 && Slot == 0)
+    {
+        for (int32 Index = 0; Index < 12; ++Index)
+        {
+            const float Y = (Index % 2 ? 1.0f : -1.0f) * (15 + Index * 3);
+            const float Z = -35 + (Index % 5) * 17;
+            AddBeam(FVector(5, Y, Z), FVector(Reach + 35 - Index * 6, Y, Z),
+                Index < 4 ? 6.0f : 3.0f);
+        }
+    }
+    else
+    {
+        const bool bPull = Archetype == 2 && Slot == 0;
+        AddRing(16, Radius * .88f, 0, Slot == 2 ? 10.0f : 6.0f,
+            bPull ? 1.0f : .12f, bPull ? .15f : 1.0f);
+        for (int32 Index = 0; Index < 8; ++Index)
+        {
+            const float A = Index * PI / 4.0f;
+            const FVector Radial(FMath::Cos(A), FMath::Sin(A), 0);
+            const FVector Start = Radial * Radius * (bPull ? .75f : .45f);
+            const FVector End = Archetype == 1 ? Start + FVector(0, 0, Radius * .45f)
+                : Start + Radial * Radius * .15f;
+            AddBeam(Start, End, Slot == 2 ? 7.0f : 4.0f,
+                bPull ? -Radial * Radius * .55f : FVector::ZeroVector);
+        }
+    }
+}
+
+void AAlphaCombatEffect::ConfigureGroundImpact(float Radius)
+{
+    Duration = .85f;
+    // Real surface-aligned contact: expanding shock rim, jagged scorch spokes,
+    // and ballistic fragments. Finite cosmetic footprint never decides damage.
+    AddRing(8, Radius * .94f, 3.0f, 7.0f, .12f, 1.0f);
+    FRandomStream Random(409);
+    for (int32 Index = 0; Index < 4; ++Index)
+    {
+        const float Angle = Index * HALF_PI + .15f;
+        const FVector Direction(FMath::Cos(Angle), FMath::Sin(Angle), 0.0f);
+        const FVector Start = Direction * Radius * .12f + FVector(0, 0, 1);
+        AddBeam(Start, Direction * Radius * Random.FRandRange(.4f, .7f) + FVector(0, 0, 1),
+            3.5f, FVector::ZeroVector);
+    }
+    for (int32 Index = 0; Index < 8; ++Index)
+    {
+        const float Angle = Index * PI / 4.0f;
+        const FVector Direction(FMath::Cos(Angle), FMath::Sin(Angle), 0.0f);
+        const FVector Start = Direction * Radius * .12f + FVector(0, 0, 8);
+        AddBeam(Start, Start + FVector(7, 3, 10), 6.0f,
+            Direction * Radius * .6f + FVector(0, 0, Random.FRandRange(70, 140)));
+        Pieces.Last().Gravity = 250.0f;
+    }
+    // Four brief impact spikes form the anime burst silhouette at contact.
+    for (int32 Index = 0; Index < 4; ++Index)
+    {
+        const float Angle = Index * HALF_PI;
+        const FVector Radial(FMath::Cos(Angle), FMath::Sin(Angle), 0);
+        AddBeam(FVector(0, 0, 4), Radial * Radius * .18f + FVector(0, 0, 70),
+            11.0f, FVector(0, 0, 15));
+    }
+
 }
 
 void AAlphaCombatEffect::AddBeam(const FVector& Start, const FVector& End, float Thickness,
@@ -305,6 +435,7 @@ void AAlphaCombatEffect::AddBeam(const FVector& Start, const FVector& End, float
     Piece.RadialEnd = RadialEnd;
     Pieces.Add(Piece);
     Instances->AddInstance(FTransform(Piece.Rotation, Piece.Start, Piece.Scale));
+    CoreInstances->AddInstance(FTransform(Piece.Rotation, Piece.Start, Piece.Scale * FVector(1.0f, .35f, .35f)));
 }
 
 void AAlphaCombatEffect::AddRing(int32 Segments, float Radius, float Height, float Thickness,
@@ -335,8 +466,11 @@ void AAlphaCombatEffect::AddSparks(int32 Count, float Radius, float Travel, floa
 
 void AAlphaCombatEffect::UpdatePieces(float Progress)
 {
-    const float Ease = 1.0f - FMath::Square(1.0f - Progress);
     const float Dissolve = static_cast<float>(AlphaPresentation::EffectEnvelope(Age, Duration));
+    FVector CameraLocal(0, -1, 1);
+    if (const APlayerController* Player = GetWorld()->GetFirstPlayerController())
+        if (Player->PlayerCameraManager)
+            CameraLocal = GetActorTransform().InverseTransformPosition(Player->PlayerCameraManager->GetCameraLocation());
     for (int32 Index = 0; Index < Pieces.Num(); ++Index)
     {
         const FPiece& Piece = Pieces[Index];
@@ -349,12 +483,32 @@ void AAlphaCombatEffect::UpdatePieces(float Progress)
         FVector Position = Piece.Start;
         Position.X *= RadialScale;
         Position.Y *= RadialScale;
-        Position += Piece.Drift * LocalEase;
+        Position += Piece.Drift * (Piece.Gravity > 0.0f ? LocalProgress : LocalEase);
+        if (Piece.Gravity > 0.0f)
+            Position.Z = static_cast<double>(AlphaPresentation::DebrisHeight(Piece.Start.Z, Piece.Drift.Z, Piece.Gravity, LocalProgress));
         FVector Scale = Piece.Scale * (bVisible ? FMath::Max(.005f, LocalDissolve) : 0.0f);
         if (Piece.RadialStart != Piece.RadialEnd) Scale.X *= RadialScale;
         Instances->UpdateInstanceTransform(Index, FTransform(Piece.Rotation, Position, Scale), false,
             Index == Pieces.Num() - 1, true);
+        // Opaque shells occlude a concentric inner mesh. Place the highlight
+        // ribbon on the camera-facing OUTSIDE face instead, including end-on views.
+        const FVector View = Piece.Rotation.UnrotateVector(CameraLocal - Position).GetSafeNormal();
+        int32 FaceAxis = 0;
+        if (FMath::Abs(View.Y) > FMath::Abs(View.X)) FaceAxis = 1;
+        if (FMath::Abs(View.Z) > FMath::Abs(View[FaceAxis])) FaceAxis = 2;
+        FVector CoreScale = Scale * .4f;
+        if (FaceAxis != 0) CoreScale.X = Scale.X;
+        CoreScale[FaceAxis] = Scale[FaceAxis] * .12f;
+        // A long beam seen end-on needs a thin cap, not an extra 12% reach.
+        if (FaceAxis == 0) CoreScale.X = FMath::Min(CoreScale.X, .01);
+        FVector FaceOffset = FVector::ZeroVector;
+        FaceOffset[FaceAxis] = (Scale[FaceAxis] + CoreScale[FaceAxis]) * 50.0 * (View[FaceAxis] < 0 ? -1.0 : 1.0);
+        const FVector CorePosition = Position + Piece.Rotation.RotateVector(FaceOffset);
+        CoreInstances->UpdateInstanceTransform(Index,
+            FTransform(Piece.Rotation, CorePosition, CoreScale), false,
+            Index == Pieces.Num() - 1, true);
     }
+    if (CoreMaterial) CoreMaterial->SetScalarParameterValue(TEXT("Glow"), PeakGlow * 1.5f * Dissolve);
     if (EffectMaterial)
     {
         EffectMaterial->SetScalarParameterValue(TEXT("Glow"), PeakGlow * Dissolve);
