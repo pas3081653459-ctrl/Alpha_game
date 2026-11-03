@@ -20,26 +20,29 @@ AAlphaForgeEnvironment::AAlphaForgeEnvironment()
     UDirectionalLightComponent* Key = CreateDefaultSubobject<UDirectionalLightComponent>(TEXT("WarmKey"));
     Key->SetupAttachment(RootComponent);
     Key->SetMobility(EComponentMobility::Movable);
-    Key->SetRelativeRotation(FRotator(-52, -35, 0));
-    Key->SetIntensity(7.f);
+    // Illuminate the camera-facing (-Y) facade rather than only its back.
+    Key->SetRelativeRotation(FRotator(-52, 140, 0));
+    Key->SetIntensity(10.f);
+    Key->ForwardShadingPriority = 1;
     Key->SetLightColor(FLinearColor(1.f, .91f, .8f));
     Key->SetCastShadows(true);
 
     UDirectionalLightComponent* Fill = CreateDefaultSubobject<UDirectionalLightComponent>(TEXT("CoolFill"));
     Fill->SetupAttachment(RootComponent);
     Fill->SetMobility(EComponentMobility::Movable);
-    Fill->SetRelativeRotation(FRotator(-30, 140, 0));
-    Fill->SetIntensity(2.f);
-    Fill->SetLightColor(FLinearColor(.36f, .58f, 1.f));
+    Fill->SetRelativeRotation(FRotator(-30, -35, 0));
+    Fill->SetIntensity(4.f);
+    Fill->ForwardShadingPriority = 0;
+    Fill->SetLightColor(FLinearColor(.72f, .83f, 1.f));
     Fill->SetCastShadows(false);
 
     USkyLightComponent* Sky = CreateDefaultSubobject<USkyLightComponent>(TEXT("AmbientSky"));
     Sky->SetupAttachment(RootComponent);
     Sky->SetMobility(EComponentMobility::Movable);
-    Sky->SetIntensity(.35f);
-    Sky->SetLightColor(FLinearColor(.45f, .6f, .68f));
+    Sky->SetIntensity(1.f);
+    Sky->SetLightColor(FLinearColor(.8f, .88f, 1.f));
     Sky->SetCastShadows(false);
-    Sky->SetLowerHemisphereColor(FLinearColor(.055f, .08f, .09f));
+    Sky->SetLowerHemisphereColor(FLinearColor(.22f, .27f, .34f));
 
     UExponentialHeightFogComponent* Fog = CreateDefaultSubobject<UExponentialHeightFogComponent>(TEXT("WorkshopHaze"));
     Fog->SetupAttachment(RootComponent);
@@ -58,7 +61,7 @@ AAlphaForgeEnvironment::AAlphaForgeEnvironment()
     Settings.bOverride_AutoExposureApplyPhysicalCameraExposure = true;
     Settings.AutoExposureApplyPhysicalCameraExposure = false;
     Settings.bOverride_AutoExposureBias = true;
-    Settings.AutoExposureBias = -1.f;
+    Settings.AutoExposureBias = 1.f;
     Settings.bOverride_BloomIntensity = true;
     Settings.BloomIntensity = .18f;
     Settings.bOverride_BloomThreshold = true;
@@ -105,7 +108,9 @@ UInstancedStaticMeshComponent* AAlphaForgeEnvironment::MakeBatch(EAlphaPrimitive
     Batch->SetupAttachment(RootComponent);
     Batch->SetMobility(EComponentMobility::Movable);
     Batch->SetStaticMesh(AlphaArt::Mesh(Shape));
-    Batch->SetMaterial(0, AlphaArt::Material(this, Tint, Metallic, Roughness, Glow));
+    // Empty Entry has no guaranteed sky/reflection environment. Highly metallic
+    // scenery becomes nearly black without IBL; keep a diffuse color foundation.
+    Batch->SetMaterial(0, AlphaArt::Material(this, Tint, FMath::Min(Metallic, .35f), Roughness, Glow));
     Batch->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     Batch->SetGenerateOverlapEvents(false);
     Batch->SetCanEverAffectNavigation(false);
@@ -154,19 +159,19 @@ void AAlphaForgeEnvironment::Ring(UInstancedStaticMeshComponent* Batch, const FV
 void AAlphaForgeEnvironment::BuildWorkshop()
 {
     // 13 mesh/material batches, 416 instances, fixed seed, no Tick or gameplay collision.
-    UInstancedStaticMeshComponent* Iron = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.035f, .055f, .065f), .8f, .5f);
-    UInstancedStaticMeshComponent* DarkFloor = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.105f, .13f, .135f), .4f, .8f);
-    UInstancedStaticMeshComponent* LightFloor = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.16f, .185f, .18f), .25f, .8f);
+    UInstancedStaticMeshComponent* Iron = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.12f, .17f, .22f), .35f, .65f);
+    UInstancedStaticMeshComponent* DarkFloor = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.24f, .29f, .32f), .15f, .8f);
+    UInstancedStaticMeshComponent* LightFloor = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.34f, .39f, .41f), .1f, .8f);
     UInstancedStaticMeshComponent* Ceramic = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.055f, .27f, .27f), .12f, .3f);
     UInstancedStaticMeshComponent* Brass = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.5f, .29f, .09f), .8f, .35f);
     UInstancedStaticMeshComponent* Amber = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(1.f, .23f, .025f), .05f, .6f, 3.f);
     UInstancedStaticMeshComponent* Cyan = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.08f, .45f, .48f), .05f, .5f, .7f);
-    UInstancedStaticMeshComponent* IronPipe = MakeBatch(EAlphaPrimitive::Cylinder, FLinearColor(.055f, .075f, .08f), .85f, .45f);
+    UInstancedStaticMeshComponent* IronPipe = MakeBatch(EAlphaPrimitive::Cylinder, FLinearColor(.14f, .19f, .23f), .35f, .6f);
     UInstancedStaticMeshComponent* BrassPipe = MakeBatch(EAlphaPrimitive::Cylinder, FLinearColor(.45f, .25f, .065f), .8f, .35f);
     UInstancedStaticMeshComponent* Hearth = MakeBatch(EAlphaPrimitive::Cylinder, FLinearColor(.55f, .045f, .008f), .1f, .8f, 2.f);
     UInstancedStaticMeshComponent* Ember = MakeBatch(EAlphaPrimitive::Sphere, FLinearColor(1.f, .3f, .04f), 0.f, .7f, 3.f);
     UInstancedStaticMeshComponent* Roof = MakeBatch(EAlphaPrimitive::Cone, FLinearColor(.035f, .14f, .145f), .3f, .7f);
-    UInstancedStaticMeshComponent* DistantIron = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.065f, .105f, .12f), .3f, .9f);
+    UInstancedStaticMeshComponent* DistantIron = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.14f, .2f, .25f), .15f, .9f);
     Amber->SetCastShadow(false);
     Cyan->SetCastShadow(false);
     Hearth->SetCastShadow(false);

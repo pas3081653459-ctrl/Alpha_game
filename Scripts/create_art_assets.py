@@ -141,7 +141,17 @@ def toon_color(material, base, tint, emission):
     total_emission = expression(material, unreal.MaterialExpressionAdd, 1100, 1000)
     connect(emission, '', total_emission, 'A')
     connect(colored, '', total_emission, 'B')
-    return blend, total_emission
+    # Entry has no guaranteed sky capture. A restrained stylized ambient floor
+    # keeps shadow-side colors readable; direct lighting/shadows still add shape.
+    ambient_fill = expression(material, unreal.MaterialExpressionScalarParameter, 700, 1400,
+                              parameter_name='AmbientFill', default_value=.16)
+    ambient_color = expression(material, unreal.MaterialExpressionMultiply, 900, 1400)
+    connect(base, '', ambient_color, 'A')
+    connect(ambient_fill, '', ambient_color, 'B')
+    readable_emission = expression(material, unreal.MaterialExpressionAdd, 1300, 1100)
+    connect(total_emission, '', readable_emission, 'A')
+    connect(ambient_color, '', readable_emission, 'B')
+    return blend, readable_emission
 
 
 def create_effect_material():
@@ -206,7 +216,7 @@ def main():
     report = {
         'generator': GENERATOR, 'material': MATERIAL_PATH, 'effects_material': EFFECT_PATH,
         'textures': [TEXTURE_PATH + '/T_ForgeDetail', TEXTURE_PATH + '/T_ForgeNormal_N'],
-        'parameters': ['Tint', 'Metallic', 'Roughness', 'Glow', 'AnimeShade', 'RimStrength'],
+        'parameters': ['Tint', 'Metallic', 'Roughness', 'Glow', 'AnimeShade', 'RimStrength', 'AmbientFill'],
         'style': 'DefaultLit graphic bands and rim; separate opaque unlit energy effects',
         'status': 'saved', 'note': 'Asset save is not a rendered visual or packaging verification.',
     }
