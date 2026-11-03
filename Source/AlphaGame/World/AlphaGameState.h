@@ -49,6 +49,16 @@ public:
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Encounter")
     int32 EncounterPlayerCount = 1;
 
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Party")
+    int32 HumanPlayerCount = 0;
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Party")
+    int32 CompanionCount = 0;
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Party")
+    bool bCompanionFillEnabled = true;
+
+    UFUNCTION(BlueprintPure, Category="Party")
+    int32 GetPartyCount() const { return HumanPlayerCount + CompanionCount; }
+
     static constexpr int32 TotalWaves = 3;
 private:
     void BuildPrototypeArena();

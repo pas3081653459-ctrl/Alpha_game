@@ -2,6 +2,8 @@
 #include "World/AlphaGameMode.h"
 #include "World/AlphaGameInstance.h"
 #include "Characters/AlphaCharacter.h"
+#include "Combat/AlphaCombatComponent.h"
+#include "World/AlphaGameState.h"
 #include "Coop/AlphaReviveComponent.h"
 #include "UI/AlphaLobbyWidget.h"
 #include "Visuals/AlphaCombatCamera.h"
@@ -102,6 +104,47 @@ void AAlphaPlayerController::ServerSelectHero_Implementation(int32 HeroIndex)
         return;
     }
     Character->SetArchetype(HeroIndex);
+    Mode->RefreshCompanions();
+}
+
+void AAlphaPlayerController::SetBotFill(int32 Enabled)
+{
+    AAlphaGameMode* Mode = GetWorld()->GetAuthGameMode<AAlphaGameMode>();
+    if (!Mode)
+    {
+        ClientMessage(TEXT("Only the host can change AI teammate fill."));
+        return;
+    }
+    if ((Enabled != 0 && Enabled != 1) || !Mode->SetCompanionFillEnabled(Enabled == 1))
+        ClientMessage(TEXT("AI fill accepts 0 or 1 and can only be changed during preparation."));
+}
+
+void AAlphaPlayerController::TestDownSelf()
+{
+    if (IsLocalController()) ServerTestDownSelf();
+}
+
+void AAlphaPlayerController::ServerTestDownSelf_Implementation()
+{
+#if !UE_BUILD_SHIPPING
+    AAlphaCharacter* Character = Cast<AAlphaCharacter>(GetPawn());
+    const AAlphaGameState* State = GetWorld()->GetGameState<AAlphaGameState>();
+    if (!Character || !State || (State->RoundState != EAlphaRoundState::Fighting
+        && State->RoundState != EAlphaRoundState::Intermission))
+    {
+        ClientMessage(TEXT("Start a run before testing rescue."));
+        return;
+    }
+    UAlphaCombatComponent* Combat = Character->GetCombatComponent();
+    if (!Combat->IsAlive() || Combat->IsInvulnerable())
+    {
+        ClientMessage(TEXT("Wait until alive and no longer protected, then retry TestDownSelf."));
+        return;
+    }
+    Combat->ReceiveHit(Combat->GetMaxHealth() + 1.f, 0.f, nullptr);
+#else
+    ClientMessage(TEXT("TestDownSelf is available in development builds only."));
+#endif
 }
 
 void AAlphaPlayerController::HostGame()

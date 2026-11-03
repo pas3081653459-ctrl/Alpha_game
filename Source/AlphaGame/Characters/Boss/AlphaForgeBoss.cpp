@@ -89,7 +89,7 @@ AAlphaCharacter* AAlphaForgeBoss::FindClosestLivingPlayer() const
     for (TActorIterator<AAlphaCharacter> It(GetWorld()); It; ++It)
     {
         AAlphaCharacter* Candidate = *It;
-        if (!Candidate->IsPlayerControlled() || !Candidate->GetCombatComponent()->IsAlive()) continue;
+        if (!Candidate->IsCoopParticipant() || !Candidate->GetCombatComponent()->IsAlive()) continue;
         const float Distance = FVector::DistSquared2D(GetActorLocation(), Candidate->GetActorLocation());
         if (Distance < BestDistance)
         {
@@ -182,7 +182,7 @@ void AAlphaForgeBoss::ResolveAttack()
     for (TActorIterator<AAlphaCharacter> It(GetWorld()); It; ++It)
     {
         AAlphaCharacter* Target = *It;
-        if (!Target->IsPlayerControlled() || !Target->GetCombatComponent()->IsAlive()) continue;
+        if (!Target->IsCoopParticipant() || !Target->GetCombatComponent()->IsAlive()) continue;
         if (IsPointInAttackZone(AttackType, TelegraphOrigin, TelegraphDirection, Target->GetActorLocation()))
         {
             // ReceiveHit enforces team, life and dodge invulnerability on authority.

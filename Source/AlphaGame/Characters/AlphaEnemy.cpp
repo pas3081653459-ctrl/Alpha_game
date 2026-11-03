@@ -25,7 +25,7 @@ void AAlphaEnemy::FindTarget()
     for (TActorIterator<AAlphaCharacter> It(GetWorld()); It; ++It)
     {
         AAlphaCharacter* Candidate = *It;
-        if (!Candidate->IsPlayerControlled() || Candidate->IsDefeated() || !Candidate->GetCombatComponent()->IsAlive()) continue;
+        if (!Candidate->IsCoopParticipant() || Candidate->IsDefeated() || !Candidate->GetCombatComponent()->IsAlive()) continue;
         const float DistanceSquared = FVector::DistSquared(GetActorLocation(), Candidate->GetActorLocation());
         if (DistanceSquared < NearestDistanceSquared)
         {
@@ -41,7 +41,7 @@ void AAlphaEnemy::Tick(float DeltaSeconds)
     if (!HasAuthority() || IsDefeated() || !CombatComponent->CanAct()) return;
 
     RetargetCountdown -= DeltaSeconds;
-    if (RetargetCountdown <= 0.0f || !Target.IsValid() || !Target->GetCombatComponent()->IsAlive())
+    if (RetargetCountdown <= 0.0f || !Target.IsValid() || !Target->IsCoopParticipant() || !Target->GetCombatComponent()->IsAlive())
     {
         FindTarget();
         RetargetCountdown = 0.25f;

@@ -25,6 +25,7 @@ private:
     UFUNCTION() void Join();
     UFUNCTION() void Start();
     UFUNCTION() void Restart();
+    UFUNCTION() void ToggleCompanions();
     UFUNCTION() void HeroBlade();
     UFUNCTION() void HeroWeaver();
     UFUNCTION() void HeroLantern();
@@ -33,5 +34,6 @@ private:
     UPROPERTY(Transient) TObjectPtr<UTextBlock> StatusText;
     UPROPERTY(Transient) TObjectPtr<UButton> StartButton;
     UPROPERTY(Transient) TObjectPtr<UButton> RestartButton;
+    UPROPERTY(Transient) TObjectPtr<UButton> CompanionButton;
     bool bObservedPreparation = false;
 };

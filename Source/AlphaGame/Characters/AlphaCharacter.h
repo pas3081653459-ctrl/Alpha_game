@@ -53,6 +53,9 @@ public:
     UFUNCTION(BlueprintPure, Category = "Combat")
     bool IsDefeated() const { return bDefeated; }
 
+    /** Authority-side roster membership; disconnected or unpossessed pawns are excluded. */
+    bool IsCoopParticipant() const;
+
 protected:
     virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;

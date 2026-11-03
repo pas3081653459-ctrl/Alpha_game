@@ -1,12 +1,12 @@
 # 集成验证记录
 
-本记录对应当前未提交工作区。**M0 的引擎运行验收仍阻塞；M1 功能代码已继续集成，未标为验收完成。**
+本记录对应本轮源码及本机实际检查。**M0 的引擎运行验收仍阻塞；M1 功能代码已继续集成，未标为验收完成。**
 
 ## 实际执行
 
 | 检查 | 结果 | 能证明什么 |
 |---|---|---|
-| `python3 Scripts/check_project.py` | 通过 | 工程描述、29 个必要文件、19 个头文件、输入与本地 include、入口配置；发现 18 项不同的 UE 测试名称 |
+| `python3 Scripts/check_project.py` | 通过 | 工程描述、35 个必要文件、21 个头文件、输入与本地 include、入口配置；发现 25 项不同的 UE 测试名称 |
 | `python3 Scripts/run_rules_tests.py` | 222/222 通过 | 实际共享规则在严格 C++17 编译器中的行为 |
 | `python3 Scripts/run_rules_tests.py --sanitize` | 222/222 通过，无 UBSan 报告 | 同一规则的未定义行为检查 |
 | `python3 Scripts/run_presentation_tests.py` / `--sanitize` | 各270/270通过 | 实际用于镜头距离、平滑、效果衰减的纯计算 |
@@ -31,7 +31,7 @@
 
 ## UE 测试：源码已写，全部未执行
 
-当前共 18 项：Combat 8 项、Coop 5 项、Abilities 3 项、Encounter 2 项。
+当前共 25 项：Combat 8 项、Coop 5 项、Abilities 3 项、Encounter 2 项、Companion 6 项、Party 1 项。
 
 包括伤害/友伤/死亡重置/无敌/救起/硬直、救援恢复/独占/受击/距离/断线/遮挡、技能冷却/非法输入/合作资源，以及 Boss 攻击区域/阶段/人数缩放/防止重复配置回血。
 
@@ -39,15 +39,27 @@
 
 ## 自动化与外部阻塞
 
-- GitHub Actions 可移植检查工作流已写入，但未推送、未触发或观察托管 CI 结果。
+- GitHub Actions 可移植检查工作流已提供；本轮未查询托管 CI 结果。
 - Windows 构建、测试和打包 PowerShell 脚本已更新，尚未在 PowerShell/Unreal 环境执行。
 - 当前 Linux 云机器没有 Unreal Editor、UnrealBuildTool 或 Windows 工具链。没有生成 EXE，没有运行图形、物理命中或三台真实 Windows 设备联机。
 - 正式手工模型、骨骼动画、声音和完整关卡尚未制作；已有程序化造型与网格技能效果。完整主材质 `.uasset` 仍需在引擎运行 Art 生成步骤。
 
-下一执行入口是 README 的 Windows 构建命令。先取得真实 UHT/UBT 结果，再运行 18 项 UE 测试与完整单人/三机流程，按 `ACCEPTANCE.md` 留存日志。引擎验收通过后，按 `PROJECT_PLAN.md` 自动进入工坊垂直切片的动作与美术制作，避免基于未经运行的接口批量生产内容。
+下一执行入口是 README 的 Windows 构建命令。先取得真实 UHT/UBT 结果，再运行 25 项 UE 测试与完整单人/三机流程，按 `ACCEPTANCE.md` 留存日志。引擎验收通过后，按 `PROJECT_PLAN.md` 自动进入工坊垂直切片的动作与美术制作，避免基于未经运行的接口批量生产内容。
 
 ## 美术增量验证
 
 新增两张256×256原创PNG，已校验结构、CRC、尺寸与SHA-256，并在临时目录重生成确认字节一致。UE Python脚本仅通过语法检查，尚未执行API；Art/Package包装需要核对本次JSON报告及三个资产包。详见 `ART_REVIEW.md`。
 
 本轮补齐远端队友取景、正常取景距离下的角色全帧更新、攻击光弧范围与权威取消视觉通知。没有新增实机截图、Cook或GPU性能结论。
+
+## AI 同伴增量验证
+
+- `python3 Scripts/run_companion_tests.py`：448/448 通过。
+- `python3 Scripts/run_companion_tests.py --sanitize`：448/448 通过，明确启用 UBSan；无报告。
+- 原有战斗222项与视觉270项及各自UBSan回归通过，总940项独立规则检查。
+- 新增6项同伴行为与1项队伍生命周期UE测试源码，全部未执行。
+- 救援、敌人/Boss选敌、全灭判定已接受权威侧AI参与者；客户端镜头/HUD依旧按复制队伍与同伴标记识别。
+- 修复技能深度/高度错位、真人加入前释放bot出生位、唯一真人Pawn销毁卡局与重开AI内部状态残留；倒地仍保留重力，避免空中悬浮导致无法接近救援。
+- 当前简化跟随和避险不是复杂导航，没有AI实际移动、可靠通关或多人复制验收结论。开发命令 `TestDownSelf` 只在非Shipping构建生效。
+
+测试流程与限制见 `COMPANION_TESTING.md`。

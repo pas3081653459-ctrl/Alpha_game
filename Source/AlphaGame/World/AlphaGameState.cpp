@@ -26,6 +26,9 @@ void AAlphaGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
     DOREPLIFETIME(AAlphaGameState, ForgeBoss);
     DOREPLIFETIME(AAlphaGameState, BossPhase);
     DOREPLIFETIME(AAlphaGameState, EncounterPlayerCount);
+    DOREPLIFETIME(AAlphaGameState, HumanPlayerCount);
+    DOREPLIFETIME(AAlphaGameState, CompanionCount);
+    DOREPLIFETIME(AAlphaGameState, bCompanionFillEnabled);
 }
 
 void AAlphaGameState::BuildPrototypeArena()

@@ -67,6 +67,12 @@ AAlphaCharacter::AAlphaCharacter()
     }
 }
 
+bool AAlphaCharacter::IsCoopParticipant() const
+{
+    return CombatComponent && CombatComponent->TeamId == 1 && GetController()
+        && (IsPlayerControlled() || ActorHasTag(TEXT("Companion")));
+}
+
 void AAlphaCharacter::BeginPlay()
 {
     Super::BeginPlay();
@@ -278,7 +284,9 @@ void AAlphaCharacter::ApplyDefeatedState()
     {
         StopJumping();
         GetCharacterMovement()->StopMovementImmediately();
-        GetCharacterMovement()->DisableMovement();
+        // Keep gravity active for an aerial knockout; MOVE_None would leave a
+        // downed teammate floating above the rescue range indefinitely.
+        GetCharacterMovement()->SetMovementMode(MOVE_Falling);
     }
     else
     {

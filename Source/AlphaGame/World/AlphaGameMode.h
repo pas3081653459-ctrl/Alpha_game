@@ -5,6 +5,7 @@
 #include "AlphaGameMode.generated.h"
 
 class AAlphaEnemy;
+class AAlphaCompanion;
 
 UCLASS()
 class ALPHAGAME_API AAlphaGameMode : public AGameModeBase
@@ -20,7 +21,17 @@ public:
     /** Explicit host-only entry from training; never begins on a login timer. */
     bool StartPrototypeRun();
     bool IsSelectionAllowed() const;
+    bool SetCompanionFillEnabled(bool bEnabled);
+    void RefreshCompanions();
+    bool IsCompanionFillEnabled() const { return bCompanionFillEnabled; }
 private:
+    friend class FAlphaPartyLifecycleTest;
+    TArray<APlayerController*> HumanControllers(const AController* Ignore = nullptr) const;
+    TArray<AAlphaCompanion*> CompanionActors() const;
+    void UpdatePartyCounts();
+    void ClearCompanions();
+    static void DestroyCompanion(AAlphaCompanion* Companion);
+    bool bCompanionFillEnabled = true;
     void StartNextWave();
     void CheckRound();
     void EnsureRoundMonitor();

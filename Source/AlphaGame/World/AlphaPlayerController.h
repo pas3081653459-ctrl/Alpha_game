@@ -25,6 +25,11 @@ public:
     void StartRun();
     UFUNCTION(Exec, BlueprintCallable)
     void SelectHero(int32 HeroIndex);
+    UFUNCTION(Exec, BlueprintCallable)
+    void SetBotFill(int32 Enabled);
+    /** Development-only rescue exercise; damage is calculated on the authority. */
+    UFUNCTION(Exec)
+    void TestDownSelf();
     UFUNCTION(Exec)
     void CameraShakeStrength(float Strength);
     void SetLobbyVisible(bool bVisible);
@@ -33,6 +38,8 @@ private:
     void ToggleLobby();
     UFUNCTION(Server, Reliable)
     void ServerSelectHero(int32 HeroIndex);
+    UFUNCTION(Server, Reliable)
+    void ServerTestDownSelf();
     UPROPERTY(Transient)
     TObjectPtr<UAlphaLobbyWidget> LobbyWidget;
 };

@@ -8,3 +8,5 @@
 - Keep targeting, damage, cooldowns, revival, phase transitions and resource rewards authoritative. Client RPCs submit intent, never damage values or arbitrary target transforms.
 - Keep shared portable rules in `Source/AlphaGame/Rules`; test behavior in `Scripts/test_rules.cpp`. UE tests live in `Source/AlphaGame/Tests`. Update the Windows report validation when changing test discovery.
 - Document behavior and limitations in `README.md`, `Docs/M1_PROGRESS.md`, and `Docs/VALIDATION.md`. Match explanations to the implementation, including generated-material fallback and unsupported mid-run reconnection.
+
+- Test companions are now explicitly requested: default fill to three during preparation, keep human connection seats separate, use authoritative shared combat/rescue, and never change a live encounter population. Run `python3 Scripts/run_companion_tests.py` and `python3 Scripts/run_companion_tests.py --sanitize` for roster/AI rule changes. Preserve the distinction between test AI and complex navigation or guaranteed AI completion.

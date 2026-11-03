@@ -89,7 +89,7 @@ bool UAlphaReviveComponent::IsRoundActive() const
 
 bool UAlphaReviveComponent::CanRescue(AAlphaCharacter* Character) const
 {
-    return IsValid(Character) && Character->IsPlayerControlled() && !Character->IsDefeated()
+    return IsValid(Character) && Character->IsCoopParticipant() && !Character->IsDefeated()
         && Character->GetCombatComponent()->CanAct();
 }
 
@@ -104,7 +104,7 @@ bool UAlphaReviveComponent::HasClearLineOfSight(const AAlphaCharacter* Candidate
 bool UAlphaReviveComponent::IsEligibleTarget(AAlphaCharacter* Candidate) const
 {
     const AAlphaCharacter* Rescuer = Cast<AAlphaCharacter>(GetOwner());
-    if (!IsValid(Candidate) || !Rescuer || Candidate == Rescuer || !Candidate->IsPlayerControlled()
+    if (!IsValid(Candidate) || !Rescuer || Candidate == Rescuer || !Candidate->IsCoopParticipant()
         || !Candidate->IsDefeated() || Candidate->GetCombatComponent()->IsAlive()
         || Candidate->GetCombatComponent()->TeamId != Rescuer->GetCombatComponent()->TeamId) return false;
     const AAlphaCharacter* ClaimedBy = Candidate->GetReviveComponent()->CurrentRescuer;
@@ -153,7 +153,7 @@ void UAlphaReviveComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
     }
     AlphaRules::ReviveConditions Conditions;
     Conditions.HelperAlive = CanRescue(Rescuer);
-    Conditions.TargetDown = ReviveTarget->IsPlayerControlled() && ReviveTarget->IsDefeated()
+    Conditions.TargetDown = ReviveTarget->IsCoopParticipant() && ReviveTarget->IsDefeated()
         && !ReviveTarget->GetCombatComponent()->IsAlive()
         && ReviveTarget->GetCombatComponent()->TeamId == Rescuer->GetCombatComponent()->TeamId;
     Conditions.InRange = FVector::DistSquared(Rescuer->GetActorLocation(), ReviveTarget->GetActorLocation()) <= FMath::Square(ReviveRange);

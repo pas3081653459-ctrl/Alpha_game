@@ -43,6 +43,8 @@ public:
     EAlphaForgeAttackState GetAttackState() const { return AttackState; }
     double GetAttackResolveTime() const { return AttackResolveTime; }
     double GetAttackCooldownUntil() const { return AttackCooldownUntil; }
+    FVector GetTelegraphOrigin() const { return TelegraphOrigin; }
+    FVector GetTelegraphDirection() const { return TelegraphDirection; }
 
     /** Exact gameplay footprint shared by authority damage and automation tests. */
     static bool IsPointInAttackZone(EAlphaForgeAttack Attack, const FVector& Origin,

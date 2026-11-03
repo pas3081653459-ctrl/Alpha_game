@@ -3,8 +3,10 @@
 #include "World/AlphaPlayerController.h"
 #include "Characters/AlphaCharacter.h"
 #include "Characters/AlphaEnemy.h"
+#include "Characters/AlphaCompanion.h"
 #include "Characters/Boss/AlphaForgeBoss.h"
 #include "Rules/CombatRules.h"
+#include "Rules/CompanionRules.h"
 #include "Combat/AlphaCombatComponent.h"
 #include "UI/AlphaHUD.h"
 #include "Engine/World.h"
@@ -34,7 +36,7 @@ void AAlphaGameMode::InitGame(const FString& MapName, const FString& Options, FS
 void AAlphaGameMode::PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)
 {
     Super::PreLogin(Options, Address, UniqueId, ErrorMessage);
-    if (ErrorMessage.IsEmpty() && GetNumPlayers() >= 3)
+    if (ErrorMessage.IsEmpty() && HumanControllers().Num() >= 3)
     {
         ErrorMessage = TEXT("Room full: maximum three players.");
     }
@@ -49,7 +51,7 @@ void AAlphaGameMode::PostLogin(APlayerController* NewPlayer)
 {
     Super::PostLogin(NewPlayer);
     // Recheck after admission: near-simultaneous PreLogin calls can overlap.
-    if (GetNumPlayers() > 3)
+    if (HumanControllers().Num() > 3)
     {
         if (GameSession) GameSession->KickPlayer(NewPlayer, FText::FromString(TEXT("Room full: maximum three players.")));
         return;
@@ -61,25 +63,37 @@ void AAlphaGameMode::PostLogin(APlayerController* NewPlayer)
         if (GameSession) GameSession->KickPlayer(NewPlayer, FText::FromString(TEXT("Run in progress: wait for preparation or the result screen.")));
         return;
     }
+    // Immediately free the slot's bot collision before the new human pawn
+    // chooses a PlayerStart; creation/role assignment waits for possession.
+    RefreshCompanions();
     EnsureRoundMonitor();
+    // PostLogin does not guarantee that RestartPlayer/possession has completed.
+    GetWorldTimerManager().SetTimerForNextTick(this, &AAlphaGameMode::RefreshCompanions);
 }
 
 void AAlphaGameMode::Logout(AController* Exiting)
 {
     Super::Logout(Exiting);
-    if (GetNumPlayers() == 0)
+    if (HumanControllers(Exiting).IsEmpty())
     {
         GetWorldTimerManager().ClearTimer(WaveTimer);
         GetWorldTimerManager().ClearTimer(MonitorTimer);
         ClearEncounterActors();
+        ClearCompanions();
         if (AAlphaGameState* State = GetGameState<AAlphaGameState>())
         {
             State->Wave = 0;
             State->RemainingEnemies = 0;
             State->BossPhase = 0;
+            State->HumanPlayerCount = 0;
+            State->CompanionCount = 0;
             State->RoundState = EAlphaRoundState::Waiting;
             State->EncounterStage = EAlphaEncounterStage::Preparation;
         }
+    }
+    else
+    {
+        GetWorldTimerManager().SetTimerForNextTick(this, &AAlphaGameMode::RefreshCompanions);
     }
     // A departing player never recalculates/heals an already spawned boss.
 }
@@ -104,12 +118,139 @@ bool AAlphaGameMode::IsSelectionAllowed() const
         || State->RoundState == EAlphaRoundState::Victory || State->RoundState == EAlphaRoundState::Defeat);
 }
 
+TArray<APlayerController*> AAlphaGameMode::HumanControllers(const AController* Ignore) const
+{
+    TArray<APlayerController*> Result;
+    for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+    {
+        APlayerController* Player = It->Get();
+        if (IsValid(Player) && Player != Ignore && !Player->IsActorBeingDestroyed()) Result.Add(Player);
+    }
+    return Result;
+}
+
+TArray<AAlphaCompanion*> AAlphaGameMode::CompanionActors() const
+{
+    TArray<AAlphaCompanion*> Result;
+    for (TActorIterator<AAlphaCompanion> It(GetWorld()); It; ++It)
+    {
+        if (IsValid(*It) && !It->IsActorBeingDestroyed()) Result.Add(*It);
+    }
+    return Result;
+}
+
+void AAlphaGameMode::UpdatePartyCounts()
+{
+    if (AAlphaGameState* State = GetGameState<AAlphaGameState>())
+    {
+        State->HumanPlayerCount = HumanControllers().Num();
+        State->CompanionCount = CompanionActors().Num();
+        State->bCompanionFillEnabled = bCompanionFillEnabled;
+    }
+}
+
+void AAlphaGameMode::DestroyCompanion(AAlphaCompanion* Companion)
+{
+    if (!IsValid(Companion)) return;
+    AController* Controller = Companion->GetController();
+    // AAIController never occupies a human login slot or owns a PlayerState.
+    if (Controller && !Controller->IsPlayerController()) Controller->UnPossess();
+    Companion->Destroy();
+    if (IsValid(Controller) && !Controller->IsPlayerController()) Controller->Destroy();
+}
+
+void AAlphaGameMode::ClearCompanions()
+{
+    for (AAlphaCompanion* Companion : CompanionActors()) DestroyCompanion(Companion);
+    UpdatePartyCounts();
+}
+
+bool AAlphaGameMode::SetCompanionFillEnabled(bool bEnabled)
+{
+    AAlphaGameState* State = GetGameState<AAlphaGameState>();
+    if (!HasAuthority() || !State || State->RoundState != EAlphaRoundState::Waiting) return false;
+    bCompanionFillEnabled = bEnabled;
+    RefreshCompanions();
+    return true;
+}
+
+void AAlphaGameMode::RefreshCompanions()
+{
+    AAlphaGameState* State = GetGameState<AAlphaGameState>();
+    if (!HasAuthority() || !State) return;
+    UpdatePartyCounts();
+    const bool bWaiting = State->RoundState == EAlphaRoundState::Waiting;
+    const bool bTerminal = State->RoundState == EAlphaRoundState::Victory || State->RoundState == EAlphaRoundState::Defeat;
+    if (!bWaiting && !bTerminal) return; // Active encounter population is locked.
+    const TArray<APlayerController*> Humans = HumanControllers();
+    const int32 Desired = AlphaCompanionRules::MissingCompanions(Humans.Num(), bCompanionFillEnabled);
+    TArray<AAlphaCompanion*> Bots = CompanionActors();
+    while (Bots.Num() > Desired)
+    {
+        DestroyCompanion(Bots.Pop());
+    }
+    // Result screens may admit humans, but never add or revive bots. Downed
+    // bodies remain for results unless a new human needs their party slot.
+    if (!bWaiting)
+    {
+        UpdatePartyCounts();
+        return;
+    }
+    int32 HeroCounts[3] = {0, 0, 0};
+    for (APlayerController* Human : Humans)
+    {
+        const AAlphaCharacter* Character = Cast<AAlphaCharacter>(Human->GetPawn());
+        if (!Character || !Character->IsCoopParticipant() || !Character->GetCombatComponent()->IsAlive())
+        {
+            UpdatePartyCounts();
+            return; // Wait for possession or an explicit round reset.
+        }
+        ++HeroCounts[FMath::Clamp(Character->GetArchetype(), 0, 2)];
+    }
+    while (Bots.Num() < Desired)
+    {
+        const int32 Slot = Humans.Num() + Bots.Num();
+        FActorSpawnParameters Params;
+        Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+        AAlphaCompanion* Bot = GetWorld()->SpawnActor<AAlphaCompanion>(AAlphaCompanion::StaticClass(),
+            FVector(-650 + Slot * 180, -100 + Slot * 100, 110), FRotator::ZeroRotator, Params);
+        if (!Bot)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("AlphaGame: companion fill incomplete; spawn failed."));
+            break;
+        }
+        Bots.Add(Bot);
+    }
+    for (AAlphaCompanion* Bot : Bots)
+    {
+        const int32 Hero = AlphaCompanionRules::ChooseHero(HeroCounts[0], HeroCounts[1], HeroCounts[2]);
+        ++HeroCounts[Hero];
+        if (Bot->GetArchetype() != Hero) Bot->SetArchetype(Hero);
+        if (!Bot->GetController()) Bot->SpawnDefaultController();
+    }
+    UpdatePartyCounts();
+}
+
 bool AAlphaGameMode::StartPrototypeRun()
 {
     AAlphaGameState* State = GetGameState<AAlphaGameState>();
-    if (!HasAuthority() || !State || State->RoundState != EAlphaRoundState::Waiting || GetNumPlayers() < 1) return false;
-    // Capture once: joining/leaving must not mutate live encounter vitality.
-    RunPlayerCount = FMath::Clamp(GetNumPlayers(), 1, 3);
+    if (!HasAuthority() || !State || State->RoundState != EAlphaRoundState::Waiting) return false;
+    RefreshCompanions();
+    const TArray<APlayerController*> Humans = HumanControllers();
+    const TArray<AAlphaCompanion*> Bots = CompanionActors();
+    if (Humans.IsEmpty() || Humans.Num() > 3
+        || Bots.Num() != AlphaCompanionRules::MissingCompanions(Humans.Num(), bCompanionFillEnabled)) return false;
+    for (APlayerController* Human : Humans)
+    {
+        AAlphaCharacter* Character = Cast<AAlphaCharacter>(Human->GetPawn());
+        if (!Character || !Character->IsCoopParticipant() || !Character->GetCombatComponent()->IsAlive()) return false;
+    }
+    for (AAlphaCompanion* Bot : Bots)
+    {
+        if (!Bot->IsCoopParticipant() || !Bot->GetCombatComponent()->IsAlive()) return false;
+    }
+    // Capture the whole ready party once. Disconnects never heal a live boss.
+    RunPlayerCount = Humans.Num() + Bots.Num();
     State->EncounterPlayerCount = RunPlayerCount;
     State->EncounterStage = EAlphaEncounterStage::Waves;
     EnsureRoundMonitor();
@@ -133,8 +274,15 @@ void AAlphaGameMode::MarkDefeat()
 
 void AAlphaGameMode::ClearEncounterActors()
 {
-    for (TActorIterator<AAlphaEnemy> It(GetWorld()); It; ++It) It->Destroy();
-    for (TActorIterator<AAlphaForgeBoss> It(GetWorld()); It; ++It) It->Destroy();
+    const auto DestroyEnemy = [](APawn* Enemy)
+    {
+        AController* Controller = Enemy->GetController();
+        if (Controller && !Controller->IsPlayerController()) Controller->UnPossess();
+        Enemy->Destroy();
+        if (IsValid(Controller) && !Controller->IsPlayerController()) Controller->Destroy();
+    };
+    for (TActorIterator<AAlphaEnemy> It(GetWorld()); It; ++It) DestroyEnemy(*It);
+    for (TActorIterator<AAlphaForgeBoss> It(GetWorld()); It; ++It) DestroyEnemy(*It);
     WaveEnemies.Reset();
     if (AAlphaGameState* State = GetGameState<AAlphaGameState>()) State->ForgeBoss = nullptr;
 }
@@ -142,7 +290,7 @@ void AAlphaGameMode::ClearEncounterActors()
 void AAlphaGameMode::StartNextWave()
 {
     AAlphaGameState* State = GetGameState<AAlphaGameState>();
-    if (!State || GetNumPlayers() == 0) return;
+    if (!State || HumanControllers().IsEmpty()) return;
     if (State->RoundState != EAlphaRoundState::Waiting && State->RoundState != EAlphaRoundState::Intermission) return;
     if (State->EncounterStage != EAlphaEncounterStage::Waves || State->Wave >= AAlphaGameState::TotalWaves) return;
     State->Wave++;
@@ -169,7 +317,7 @@ void AAlphaGameMode::StartNextWave()
 void AAlphaGameMode::StartBossEncounter()
 {
     AAlphaGameState* State = GetGameState<AAlphaGameState>();
-    if (!State || GetNumPlayers() == 0 || State->RoundState != EAlphaRoundState::Intermission) return;
+    if (!State || HumanControllers().IsEmpty() || State->RoundState != EAlphaRoundState::Intermission) return;
     if (State->EncounterStage != EAlphaEncounterStage::Boss) return;
     FActorSpawnParameters Params;
     Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
@@ -191,15 +339,32 @@ void AAlphaGameMode::CheckRound()
 {
     AAlphaGameState* State = GetGameState<AAlphaGameState>();
     if (!State) return;
+    RefreshCompanions();
     if (State->RoundState != EAlphaRoundState::Fighting && State->RoundState != EAlphaRoundState::Intermission) return;
-    int32 LivingPlayers = 0;
-    for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+    const TArray<APlayerController*> Humans = HumanControllers();
+    bool bHasHumanPawn = false;
+    for (APlayerController* Human : Humans)
     {
-        APlayerController* Player = It->Get();
-        AAlphaCharacter* Character = Player ? Cast<AAlphaCharacter>(Player->GetPawn()) : nullptr;
-        if (Character && Character->GetCombatComponent() && Character->GetCombatComponent()->IsAlive()) ++LivingPlayers;
+        const AAlphaCharacter* Character = Cast<AAlphaCharacter>(Human->GetPawn());
+        if (IsValid(Character) && !Character->IsActorBeingDestroyed() && Character->IsCoopParticipant())
+        {
+            bHasHumanPawn = true;
+            break;
+        }
     }
-    if (LivingPlayers == 0 && GetNumPlayers() > 0)
+    if (!Humans.IsEmpty() && !bHasHumanPawn)
+    {
+        // A downed pawn is still a participant and can be rescued. A destroyed
+        // pawn is not: bots have no human anchor and would otherwise idle forever.
+        MarkDefeat();
+        return;
+    }
+    int32 LivingPlayers = 0;
+    for (TActorIterator<AAlphaCharacter> It(GetWorld()); It; ++It)
+    {
+        if (It->IsCoopParticipant() && It->GetCombatComponent()->IsAlive()) ++LivingPlayers;
+    }
+    if (LivingPlayers == 0 && !HumanControllers().IsEmpty())
     {
         MarkDefeat();
         return;
@@ -255,7 +420,7 @@ void AAlphaGameMode::RestartPrototypeRound()
         State->RoundState = EAlphaRoundState::Waiting;
         State->EncounterStage = EAlphaEncounterStage::Preparation;
         State->BossPhase = 0;
-        State->EncounterPlayerCount = FMath::Clamp(GetNumPlayers(), 1, 3);
+        State->EncounterPlayerCount = FMath::Clamp(HumanControllers().Num(), 1, 3);
     }
     int32 Index = 0;
     for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
@@ -268,7 +433,7 @@ void AAlphaGameMode::RestartPrototypeRound()
         if (AAlphaCharacter* Character = Cast<AAlphaCharacter>(Player->GetPawn()))
         {
             Character->ResetForRound();
-            Character->TeleportTo(FVector(-650 + Index * 180, -100 + Index * 100, 110), FRotator::ZeroRotator);
+            Character->TeleportTo(FVector(-650 + Index * 180, -100 + Index * 100, 110), FRotator::ZeroRotator, false, true);
         }
         else
         {
@@ -276,5 +441,15 @@ void AAlphaGameMode::RestartPrototypeRound()
         }
         ++Index;
     }
+    for (AAlphaCompanion* Bot : CompanionActors())
+    {
+        Bot->ResetForRound();
+        if (!Bot->GetController()) Bot->SpawnDefaultController();
+        Bot->TeleportTo(FVector(-650 + Index * 180, -100 + Index * 100, 110), FRotator::ZeroRotator, false, true);
+        Bot->ResetCompanionBrain();
+        ++Index;
+    }
+    RefreshCompanions();
+    if (AAlphaGameState* State = GetGameState<AAlphaGameState>()) State->EncounterPlayerCount = State->GetPartyCount();
     EnsureRoundMonitor();
 }

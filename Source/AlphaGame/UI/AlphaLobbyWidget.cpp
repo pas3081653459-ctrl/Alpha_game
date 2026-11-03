@@ -63,6 +63,8 @@ void UAlphaLobbyWidget::NativeOnInitialized()
     AddButton(Panel, TEXT("Hero 1 | Shen Yan - heavy blade"))->OnClicked.AddDynamic(this, &UAlphaLobbyWidget::HeroBlade);
     AddButton(Panel, TEXT("Hero 2 | A Ling - agile weaver"))->OnClicked.AddDynamic(this, &UAlphaLobbyWidget::HeroWeaver);
     AddButton(Panel, TEXT("Hero 3 | Wen Deng - lantern control"))->OnClicked.AddDynamic(this, &UAlphaLobbyWidget::HeroLantern);
+    CompanionButton = AddButton(Panel, TEXT("AI teammates: auto-fill to three"));
+    CompanionButton->OnClicked.AddDynamic(this, &UAlphaLobbyWidget::ToggleCompanions);
     StartButton = AddButton(Panel, TEXT("Start run (host / solo)"));
     StartButton->OnClicked.AddDynamic(this, &UAlphaLobbyWidget::Start);
     RestartButton = AddButton(Panel, TEXT("Reset to preparation (host / solo)"));
@@ -86,10 +88,14 @@ void UAlphaLobbyWidget::NativeTick(const FGeometry& Geometry, float DeltaSeconds
     const bool bWaiting = State && State->RoundState == EAlphaRoundState::Waiting;
     StartButton->SetIsEnabled(bCanHostControl && bWaiting);
     RestartButton->SetIsEnabled(bCanHostControl);
+    CompanionButton->SetIsEnabled(bCanHostControl && bWaiting);
+    if (UTextBlock* Caption = Cast<UTextBlock>(CompanionButton->GetContent()))
+        Caption->SetText(FText::FromString(State && State->bCompanionFillEnabled
+            ? TEXT("AI teammates: ON (click for pure solo)") : TEXT("AI teammates: OFF (click to fill party)")));
     StatusText->SetText(FText::FromString(FString::Printf(
-        TEXT("%s | Hero %d | WASD / Q,R skills / hold E revive\nChoose heroes, then host starts. Tab opens menu."),
+        TEXT("%s | Hero %d | %d human + %d AI\nChoose heroes, then host starts. Hold E to revive."),
         GetWorld()->GetNetMode() == NM_Client ? TEXT("Client") : TEXT("Host / solo"),
-        Character ? Character->GetArchetype() + 1 : 0)));
+        Character ? Character->GetArchetype() + 1 : 0, State ? State->HumanPlayerCount : 0, State ? State->CompanionCount : 0)));
     if (bWaiting) bObservedPreparation = true;
     if (bObservedPreparation && State && State->RoundState != EAlphaRoundState::Waiting)
     {
@@ -117,6 +123,13 @@ void UAlphaLobbyWidget::Restart()
 void UAlphaLobbyWidget::HeroBlade()
 {
     if (AAlphaPlayerController* PC = Cast<AAlphaPlayerController>(GetOwningPlayer())) PC->SelectHero(0);
+}
+
+void UAlphaLobbyWidget::ToggleCompanions()
+{
+    const AAlphaGameState* State = GetWorld()->GetGameState<AAlphaGameState>();
+    if (AAlphaPlayerController* PC = Cast<AAlphaPlayerController>(GetOwningPlayer()))
+        if (State) PC->SetBotFill(State->bCompanionFillEnabled ? 0 : 1);
 }
 void UAlphaLobbyWidget::HeroWeaver()
 {

@@ -22,5 +22,9 @@ jobs:
         run: python3 Scripts/run_presentation_tests.py
       - name: Check undefined behavior in presentation rules
         run: python3 Scripts/run_presentation_tests.py --sanitize
+      - name: Compile and run AI companion rules
+        run: python3 Scripts/run_companion_tests.py
+      - name: Check undefined behavior in companion rules
+        run: python3 Scripts/run_companion_tests.py --sanitize
       - name: Check tracked whitespace
         run: git diff --check HEAD

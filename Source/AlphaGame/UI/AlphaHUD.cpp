@@ -1,6 +1,7 @@
 #include "UI/AlphaHUD.h"
 #include "Abilities/AlphaAbilityComponent.h"
 #include "Characters/AlphaCharacter.h"
+#include "Characters/AlphaCompanion.h"
 #include "Characters/Boss/AlphaForgeBoss.h"
 #include "Combat/AlphaCombatComponent.h"
 #include "Coop/AlphaReviveComponent.h"
@@ -42,7 +43,8 @@ void AAlphaHUD::DrawHUD()
     Card(16, 16, CardWidth, 91);
     Text(TEXT("ASH TIDE  /  THE FOUNDRY"), Gold, 29, 25, 1.2f);
     const TCHAR* Mode = GetNetMode() == NM_Standalone ? TEXT("SOLO") : (GetNetMode() == NM_Client ? TEXT("LAN CLIENT") : TEXT("LAN HOST"));
-    Text(FString::Printf(TEXT("%s  |  %d / 3  |  TAB  Room"), Mode, State ? State->PlayerArray.Num() : 0), Muted, 29, 50);
+    Text(FString::Printf(TEXT("%s  |  %d human + %d AI / 3  |  TAB Room"), Mode,
+        State ? State->HumanPlayerCount : 0, State ? State->CompanionCount : 0), Muted, 29, 50);
     FString Objective = TEXT("Preparing...");
     if (State)
     {
@@ -116,8 +118,12 @@ void AAlphaHUD::DrawHUD()
         {
             if (!Combat->IsAlive()) Text(TEXT("DOWN / HOLD E"), Gold, Screen.X - 42, Screen.Y, .9f);
             else if (Combat->GetHealth() < Combat->GetMaxHealth() || Combat->TeamId == 1)
+            {
                 Bar(Screen.X - 23, Screen.Y, 46, 4, Combat->GetHealth() / FMath::Max(1.f, Combat->GetMaxHealth()),
                     Combat->TeamId == 1 ? FLinearColor(.12f, .72f, .6f) : FLinearColor(.85f, .24f, .05f));
+                if (const AAlphaCompanion* Bot = Cast<AAlphaCompanion>(*It))
+                    Text(FString::Printf(TEXT("AI / %s"), *Bot->GetBehaviorLabel()), Gold, Screen.X - 35, Screen.Y - 17, .8f);
+            }
         }
     }
 }

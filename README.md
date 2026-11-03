@@ -8,6 +8,7 @@ Windows 三人局域网 2.5D 合作动作闯关项目，使用 **Unreal Engine 5
 
 - 有限纵深工坊战场：炉心、黄铜环、管道、青瓷柱梁、灯笼与远景塔楼；固定曝光与冷暖灯光。
 - 按全队取景的平滑侧视镜头、轻量受击反馈与可关闭镜头震动。
+- 默认补齐三人队伍的测试用 AI 同伴：跟随、攻击、技能、避险与救援；准备阶段可关闭。
 - 沈砚、阿绫、闻灯三职业：不同基础属性、多部件人形轮廓和各两项技能；配套衣甲、机关背包、灯环与武器。
 - 轻重攻击前摇、一次命中扫掠、恢复、输入缓冲、受击取消与破势硬直。
 - 服务端权威伤害、友伤过滤、闪避无敌、技能冷却与个人共鸣。
@@ -21,6 +22,20 @@ Windows 三人局域网 2.5D 合作动作闯关项目，使用 **Unreal Engine 5
 - 可重复生成的原始细节/法线纹理，以及 UE 编辑器主材质生成脚本。
 
 完整设计见 [GAME_DESIGN.md](Docs/GAME_DESIGN.md)，源码阶段记录见 [M1_PROGRESS.md](Docs/M1_PROGRESS.md)。
+
+## 一个人测试三人合作
+
+默认开启 **AI teammates**，一名真人补两名 AI、两名真人补一名 AI，三名真人不补位。AI 不占真人连接席位，并优先选择缺少的职业。
+
+1. 完成下方 Unreal 构建后，启动一个独立游戏窗口即可，不需要创建局域网房间或再开客户端。
+2. 在 Tab 房间面板确认 **AI teammates: ON**，选择职业，点击 **Start run**。
+3. AI 会跟随、选择敌人、使用普通攻击和技能、尝试避开 Boss 预警，并救援倒地队友。头顶显示 AI 和当前行为。
+4. Development 构建中，可在开局后输入控制台命令 `TestDownSelf` 测试 AI 救援。保护状态下需要等待后重试；该命令在 Shipping 不生效。
+5. 需要纯单人对比时，重置回准备阶段，点击关闭补位，或执行 `SetBotFill 0`；`SetBotFill 1` 再次开启。
+
+真人倒地而 AI 存活时不会立即判负；全队倒地才失败。真人可同样按 E 救援倒地的 AI。开局难度按真人与 AI 总人数计算，不是给单人额外赠送无敌队友。AI 使用相同伤害、冷却、占用与中断规则，不会瞬移、自行复活或绕过无敌。
+
+当前为平坦场地的测试 AI，尚未验证实际移动/救援，也没有复杂导航或可靠通关保证；不能替代真实三机 LAN 测试。详细步骤见 [AI 同伴测试](Docs/COMPANION_TESTING.md)。
 
 ## Windows 准备与构建
 
@@ -91,12 +106,14 @@ python3 Scripts/run_rules_tests.py
 python3 Scripts/run_rules_tests.py --sanitize
 python3 Scripts/run_presentation_tests.py
 python3 Scripts/run_presentation_tests.py --sanitize
+python3 Scripts/run_companion_tests.py
+python3 Scripts/run_companion_tests.py --sanitize
 ```
 
 - 工程一致性检查通过。
-- 标准 C++17 战斗规则 **222/222 通过**、镜头/效果规则 **270/270 通过**，两套 UBSan 检查也通过。
+- 标准 C++17 战斗规则 **222/222 通过**、镜头/效果规则 **270/270 通过**，两套 UBSan 检查也通过；另有 AI 决策与技能体积规则 **448/448 通过**（含 UBSan）。
 - 这些规则被服务端战斗、救援、技能、人数缩放和 Boss 命中实际调用。
-- `.github/workflows/portable-checks.yml` 已配置同类 CI；尚未推送或验证 GitHub 托管运行。
+- `.github/workflows/portable-checks.yml` 已配置同类 CI；本轮未查询 GitHub 托管运行结果。
 
 Windows 引擎环境执行 UE 自动化与打包：
 
@@ -105,9 +122,9 @@ Windows 引擎环境执行 UE 自动化与打包：
 .\Scripts\Build-Windows.ps1 -EngineRoot 'C:\Program Files\Epic Games\UE_5.6' -Action Package
 ```
 
-目前有 **18 项 UE Automation 测试源码**，覆盖战斗、救援、技能与 Boss。脚本从源码提取完整测试名，要求本次报告中逐项成功，拒绝零测试、漏项、失败或未完成。报告位于 `Artifacts/Tests/`，Development 包位于 `Artifacts/Windows/`。
+目前有 **25 项 UE Automation 测试源码**，覆盖战斗、救援、技能、Boss、AI 同伴和队伍生命周期。脚本从源码提取完整测试名，要求本次报告中逐项成功，拒绝零测试、漏项、失败或未完成。报告位于 `Artifacts/Tests/`，Development 包位于 `Artifacts/Windows/`。
 
-**Unreal 编译、这 18 项 UE 测试、PowerShell、渲染、打包和三台 Windows 设备联机均未执行。**当前 Linux 云机器没有 Unreal Editor/UnrealBuildTool，测试结果不能替代这些门槛。
+**Unreal 编译、这 25 项 UE 测试、PowerShell、渲染、打包和三台 Windows 设备联机均未执行。**当前 Linux 云机器没有 Unreal Editor/UnrealBuildTool，测试结果不能替代这些门槛。
 
 ## 已知范围
 
