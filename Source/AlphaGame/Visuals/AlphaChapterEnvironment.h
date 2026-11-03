@@ -29,7 +29,7 @@ private:
     void BuildRouteMarkers(UInstancedStaticMeshComponent* Trim, UInstancedStaticMeshComponent* Light);
     void AddLamp(const FVector& Location, const FLinearColor& Color);
     UInstancedStaticMeshComponent* MakeBatch(EAlphaPrimitive Shape, const FLinearColor& Tint,
-        float Glow = 0.f, bool bShadow = true);
+        float Glow = 0.f, bool bShadow = true, int32 SurfaceStyle = 0, float TextureStrength = 0.f);
     static void Add(UInstancedStaticMeshComponent* Batch, const FVector& Position, const FVector& Dimensions,
         const FRotator& Rotation = FRotator::ZeroRotator);
     static void Beam(UInstancedStaticMeshComponent* Batch, const FVector& Start, const FVector& End, float Width);

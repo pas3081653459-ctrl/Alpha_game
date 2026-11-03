@@ -30,6 +30,12 @@ inline bool IsFinalComplete(int Chapter, Stage Progress)
 {
     return Chapter == ChapterCount - 1 && Progress == Stage::Complete;
 }
+inline bool CanActivateEncounter(double ClosestLivingHuman, double FarthestParticipant)
+{
+    return std::isfinite(ClosestLivingHuman) && std::isfinite(FarthestParticipant)
+        && ClosestLivingHuman >= 0. && FarthestParticipant >= 0.
+        && ClosestLivingHuman <= 420. && FarthestParticipant <= 1100.;
+}
 // Kept separate from UI: merely reading dialogue never overrides eligibility.
 inline bool WithinConversationRange(double HorizontalDistance, double HeightDifference)
 {

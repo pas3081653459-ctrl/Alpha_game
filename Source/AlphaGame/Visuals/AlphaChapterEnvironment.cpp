@@ -49,14 +49,14 @@ void AAlphaChapterEnvironment::BuildForChapter(int32 Chapter)
 }
 
 UInstancedStaticMeshComponent* AAlphaChapterEnvironment::MakeBatch(EAlphaPrimitive Shape,
-    const FLinearColor& Tint, float Glow, bool bShadow)
+    const FLinearColor& Tint, float Glow, bool bShadow, int32 SurfaceStyle, float TextureStrength)
 {
     UInstancedStaticMeshComponent* Batch = NewObject<UInstancedStaticMeshComponent>(this);
     AddInstanceComponent(Batch);
     Batch->SetupAttachment(RootComponent);
     Batch->SetMobility(EComponentMobility::Movable);
     Batch->SetStaticMesh(AlphaArt::Mesh(Shape));
-    Batch->SetMaterial(0, AlphaArt::Material(this, Tint, .12f, .78f, Glow, .55f));
+    Batch->SetMaterial(0, AlphaArt::Material(this, Tint, .12f, .78f, Glow, .55f, SurfaceStyle, TextureStrength));
     Batch->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     Batch->SetGenerateOverlapEvents(false);
     Batch->SetCanEverAffectNavigation(false);
@@ -99,144 +99,167 @@ void AAlphaChapterEnvironment::AddLamp(const FVector& Location, const FLinearCol
 void AAlphaChapterEnvironment::BuildRouteMarkers(UInstancedStaticMeshComponent* Trim,
     UInstancedStaticMeshComponent* Light)
 {
-    // Flat floor markings identify the NPC staging area and eastward route.
-    // Nothing here blocks players, attacks, navigation or camera traces.
-    Add(Trim, FVector(-1100, 0, 2), FVector(360, 660, 3));
-    Add(Light, FVector(-1100, -326, 4), FVector(350, 5, 3));
-    Add(Light, FVector(-1100, 326, 4), FVector(350, 5, 3));
-    Add(Trim, FVector(1210, 0, 2), FVector(220, 660, 3));
-    for (int32 Index = 0; Index < 3; ++Index)
+    // Local milestones only. Shared RouteGeometry owns the full walkable
+    // surface and outline; no rectangular decorative floor bridges its gaps.
+    Add(Trim, FVector(-1100, 0, 2), FVector(250, 250, 3));
+    for (float Side : {-1.f, 1.f})
+        Add(Light, FVector(-1100, Side * 127.f, 5), FVector(250, 4, 3));
+    Add(Trim, FVector(2410, 0, 2), FVector(150, 180, 3));
+    for (float X : {700.f, 1050.f})
     {
-        const float X = 420.f + Index * 155.f;
-        Beam(Light, FVector(X - 25, -310, 5), FVector(X + 15, -285, 5), 5.f);
-        Beam(Light, FVector(X + 15, -285, 5), FVector(X - 25, -260, 5), 5.f);
-    }
-    for (float X : {-1360.f, 1360.f})
-    {
-        Add(Trim, FVector(X, 390, 170), FVector(35, 35, 340));
-        Add(Light, FVector(X, 364, 245), FVector(16, 12, 95));
+        Beam(Light, FVector(X - 25, -25, 5), FVector(X + 15, 0, 5), 5.f);
+        Beam(Light, FVector(X + 15, 0, 5), FVector(X - 25, 25, 5), 5.f);
     }
 }
 
 void AAlphaChapterEnvironment::BuildDock()
 {
-    UInstancedStaticMeshComponent* Wood = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.36f, .25f, .17f));
-    UInstancedStaticMeshComponent* Deck = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.46f, .37f, .27f));
-    UInstancedStaticMeshComponent* Iron = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.16f, .23f, .3f));
-    UInstancedStaticMeshComponent* Brass = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.7f, .46f, .17f));
-    UInstancedStaticMeshComponent* Red = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.68f, .09f, .12f));
-    UInstancedStaticMeshComponent* Water = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.08f, .34f, .46f), .08f, false);
-    UInstancedStaticMeshComponent* Foam = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.35f, .65f, .72f), .1f, false);
-    UInstancedStaticMeshComponent* Amber = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(1.f, .65f, .2f), 1.f, false);
-    UInstancedStaticMeshComponent* Boat = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.13f, .2f, .29f));
-    UInstancedStaticMeshComponent* Roof = MakeBatch(EAlphaPrimitive::Cone, FLinearColor(.18f, .42f, .45f));
+    UInstancedStaticMeshComponent* Wood = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.94f, .86f, .72f), 0, true, 0, .75f);
+    UInstancedStaticMeshComponent* Iron = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.24f, .33f, .43f));
+    UInstancedStaticMeshComponent* Brass = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.86f, .6f, .24f));
+    UInstancedStaticMeshComponent* RedSail = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(1.f, .72f, .68f), 0, true, 3, .8f);
+    UInstancedStaticMeshComponent* Water = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.12f, .51f, .66f), .08f, false);
+    UInstancedStaticMeshComponent* Foam = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.53f, .85f, .88f), .05f, false);
+    UInstancedStaticMeshComponent* Amber = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(1.f, .72f, .3f), .65f, false);
+    UInstancedStaticMeshComponent* Boat = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.17f, .29f, .39f));
+    UInstancedStaticMeshComponent* Roof = MakeBatch(EAlphaPrimitive::Cone, FLinearColor(.66f, .94f, .91f), 0, true, 2, .6f);
 
-    Add(Iron, FVector(0, 0, -18), FVector(2820, 810, 34));
-    for (int32 X = 0; X < 35; ++X)
+    // Low water fills the negative spaces between the REAL cargo platforms.
+    // It is set dressing only, 85cm below the RouteGeometry deck.
+    Add(Water, FVector(500, 0, -85), FVector(4400, 2050, 12));
+    for (int32 Index = 0; Index < 16; ++Index)
     {
-        for (int32 Y = 0; Y < 4; ++Y)
-            Add((X + Y) % 4 ? Deck : Wood, FVector(-1360 + X * 80, -300 + Y * 200, -2), FVector(77, 197, 6));
+        const float X = -1400.f + Index * 250.f;
+        const float Y = Index % 2 == 0 ? -760.f : 850.f;
+        Add(Foam, FVector(X, Y, -77), FVector(95 + (Index % 3) * 35, 6, 2));
     }
-    for (float Y : {-540.f, 580.f})
+    // Six structural piles belong to the broad unloading and mooring aprons,
+    // not a repeated fence that falsely outlines a rectangular playable area.
+    for (const FVector& Pile : {FVector(-1250, 310, -90), FVector(-350, 480, -90),
+        FVector(450, -480, -90), FVector(1300, 380, -90), FVector(2180, -380, -90), FVector(2330, 380, -90)})
     {
-        Add(Water, FVector(0, Y, -63), FVector(3300, 270, 12));
-        for (int32 Index = 0; Index < 13; ++Index)
-            Add(Foam, FVector(-1450 + Index * 230, Y + (Index % 2 ? 40 : -40), -55), FVector(100, 5, 2));
+        Add(Wood, Pile, FVector(45, 45, 190));
+        Add(Brass, Pile + FVector(0, 0, 90), FVector(58, 58, 12));
     }
-    for (int32 Index = 0; Index < 8; ++Index)
+
+    // Landmark A: one asymmetric cargo crane overlooking the first encounter.
+    const FVector Crane(80, 730, 0);
+    Add(Iron, Crane + FVector(0, 0, 280), FVector(62, 62, 560));
+    Beam(Iron, Crane + FVector(-150, 0, 40), Crane + FVector(0, 0, 400), 26);
+    Beam(Iron, Crane + FVector(0, 0, 530), Crane + FVector(470, 0, 665), 38);
+    Beam(Brass, Crane + FVector(430, 0, 650), Crane + FVector(430, 0, 340), 6);
+    Add(Wood, Crane + FVector(430, 0, 285), FVector(145, 115, 110));
+    Add(RedSail, Crane + FVector(-10, -37, 450), FVector(110, 7, 85), FRotator(0, 0, -10));
+    // Dock storage stays behind the wide yard, away from the narrow connector.
+    Add(Wood, FVector(-300, 680, 80), FVector(190, 125, 160));
+    Add(Wood, FVector(-100, 690, 55), FVector(160, 120, 110), FRotator(0, 12, 0));
+
+    // Only the 600..1150 connector gets hanging ropes. Its thin silhouette
+    // makes the narrow passage legible without covering characters' feet.
+    for (float Side : {-1.f, 1.f})
     {
-        const float X = -1300.f + Index * 370.f;
-        for (float Y : {-405.f, 405.f})
-        {
-            Add(Wood, FVector(X, Y, -80), FVector(36, 36, 190));
-            Add(Brass, FVector(X, Y, 16), FVector(48, 48, 14));
-        }
+        for (float X : {635.f, 1115.f})
+            Add(Wood, FVector(X, Side * 220, 46), FVector(18, 18, 92));
+        Beam(Brass, FVector(635, Side * 220, 90), FVector(875, Side * 220, 63), 4);
+        Beam(Brass, FVector(875, Side * 220, 63), FVector(1115, Side * 220, 90), 4);
     }
-    // Cargo cranes and suspended supplies stay behind the combat boundary.
-    for (float X : {-520.f, 720.f})
+
+    // Landmark B: one moored junk with a tall, painted crimson sail at the
+    // second apron. The silhouette is distinct from the entry shelter/crane.
+    Add(Boat, FVector(1810, 860, -13), FVector(810, 250, 105));
+    Add(Wood, FVector(1810, 850, 35), FVector(660, 215, 22));
+    Add(Brass, FVector(1760, 865, 285), FVector(18, 18, 600));
+    for (int32 Strip = 0; Strip < 4; ++Strip)
     {
-        Add(Iron, FVector(X, 590, 245), FVector(55, 55, 490));
-        Beam(Iron, FVector(X, 590, 480), FVector(X + 400, 590, 590), 35);
-        Beam(Brass, FVector(X + 370, 590, 575), FVector(X + 370, 590, 320), 6);
-        Add(Wood, FVector(X + 370, 590, 270), FVector(125, 110, 100));
-        Beam(Iron, FVector(X - 100, 590, 0), FVector(X, 590, 300), 20);
+        const float Width = 320.f - Strip * 35.f;
+        Add(RedSail, FVector(1810, 842, 160 + Strip * 95), FVector(Width, 9, 90), FRotator(0, 0, -5));
+        Beam(Brass, FVector(1760, 832, 115 + Strip * 95), FVector(1810 + Width * .5f, 832, 115 + Strip * 95), 4);
     }
-    for (int32 Index = 0; Index < 3; ++Index)
-    {
-        const float X = -700 + Index * 760.f;
-        Add(Boat, FVector(X, 930, -20), FVector(550, 210, 90));
-        Add(Brass, FVector(X, 920, 160), FVector(15, 15, 360));
-        Add(Red, FVector(X + 90, 920, 210), FVector(170, 12, 190));
-    }
-    // Entry shelter frames the fixed NPC without occupying the safe floor.
-    for (float X : {-1280.f, -920.f}) Add(Red, FVector(X, 510, 120), FVector(30, 30, 240));
-    Add(Roof, FVector(-1100, 510, 285), FVector(520, 320, 130));
-    Add(Wood, FVector(-1100, 540, 140), FVector(340, 18, 210));
-    Add(Amber, FVector(-1100, 480, 245), FVector(85, 25, 15));
+    Add(Boat, FVector(2260, 865, 85), FVector(160, 205, 130), FRotator(0, 0, -15));
+
+    // Entry guide shelter and small exit buoy are subordinate route landmarks.
+    for (float X : {-1290.f, -930.f}) Add(Wood, FVector(X, 485, 120), FVector(28, 28, 240));
+    Add(Roof, FVector(-1110, 485, 285), FVector(510, 300, 135));
+    Add(Wood, FVector(-1110, 530, 140), FVector(330, 18, 205));
+    Add(Amber, FVector(-1100, 460, 230), FVector(80, 24, 18));
+    Add(Brass, FVector(2470, 305, 80), FVector(25, 25, 160));
+    Add(Amber, FVector(2470, 305, 175), FVector(75, 65, 32));
     BuildRouteMarkers(Brass, Amber);
-    AddLamp(FVector(-1100, 200, 220), FLinearColor(1.f, .72f, .4f));
-    AddLamp(FVector(1100, 180, 220), FLinearColor(.5f, .75f, 1.f));
+    AddLamp(FVector(-1100, 180, 230), FLinearColor(1.f, .8f, .55f));
+    AddLamp(FVector(1780, 260, 270), FLinearColor(.6f, .82f, 1.f));
 }
 
 void AAlphaChapterEnvironment::BuildCanal()
 {
-    UInstancedStaticMeshComponent* Stone = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.33f, .42f, .48f));
-    UInstancedStaticMeshComponent* PaleStone = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.47f, .54f, .56f));
-    UInstancedStaticMeshComponent* Teal = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.12f, .47f, .48f));
-    UInstancedStaticMeshComponent* Brass = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.67f, .46f, .2f));
-    UInstancedStaticMeshComponent* Water = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.07f, .35f, .42f), .12f, false);
-    UInstancedStaticMeshComponent* Ripple = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.27f, .62f, .64f), .15f, false);
-    UInstancedStaticMeshComponent* Light = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(1.f, .75f, .25f), 1.2f, false);
-    UInstancedStaticMeshComponent* Lamp = MakeBatch(EAlphaPrimitive::Sphere, FLinearColor(1.f, .57f, .2f), 1.2f, false);
-    UInstancedStaticMeshComponent* Roof = MakeBatch(EAlphaPrimitive::Cone, FLinearColor(.12f, .32f, .39f));
+    UInstancedStaticMeshComponent* Stone = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.92f, .94f, 1.f), 0, true, 1, .72f);
+    UInstancedStaticMeshComponent* Teal = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.65f, .96f, .94f), 0, true, 2, .7f);
+    UInstancedStaticMeshComponent* Brass = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.85f, .64f, .3f));
+    UInstancedStaticMeshComponent* Water = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.1f, .46f, .6f), .08f, false);
+    UInstancedStaticMeshComponent* Ripple = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.48f, .81f, .85f), .08f, false);
+    UInstancedStaticMeshComponent* Light = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(1.f, .8f, .4f), .8f, false);
+    UInstancedStaticMeshComponent* Lamp = MakeBatch(EAlphaPrimitive::Sphere, FLinearColor(1.f, .65f, .28f), .8f, false);
+    UInstancedStaticMeshComponent* Roof = MakeBatch(EAlphaPrimitive::Cone, FLinearColor(.66f, .92f, .96f), 0, true, 2, .65f);
 
-    Add(Stone, FVector(0, 0, -18), FVector(2820, 810, 34));
-    for (int32 X = 0; X < 14; ++X)
-        for (int32 Y = 0; Y < 4; ++Y)
-            Add((X + Y) % 3 ? PaleStone : Stone, FVector(-1300 + X * 200, -300 + Y * 200, -2), FVector(195, 195, 6));
-    for (float Y : {-610.f, 660.f})
+    Add(Water, FVector(500, 0, -88), FVector(4400, 2400, 14));
+    for (int32 Index = 0; Index < 15; ++Index)
     {
-        Add(Water, FVector(0, Y, -75), FVector(3300, 420, 14));
-        for (int32 Index = 0; Index < 18; ++Index)
-            Add(Ripple, FVector(-1500 + Index * 175, Y + (Index % 3 - 1) * 80, -66), FVector(100, 5, 2));
+        const float X = -1350.f + Index * 265.f;
+        const float Y = (Index % 2 ? 1.f : -1.f) * (880.f + Index % 3 * 70.f);
+        Add(Ripple, FVector(X, Y, -78), FVector(120, 6, 2));
     }
-    // Low edge bands retain depth readability; no tall foreground rail hides players.
-    for (float Y : {-390.f, 390.f})
+
+    // Landmark A: a SINGLE rear aqueduct arch frames the narrow bridge.
+    // Its piers sit well behind the connector, never in its walkable strip.
+    const FVector ArchCenter(860, 790, 170);
+    for (int32 Segment = 0; Segment < 18; ++Segment)
     {
-        Add(Teal, FVector(0, Y, 8), FVector(2800, 20, 16));
-        for (int32 Index = 0; Index < 11; ++Index)
-            Add(Brass, FVector(-1300 + Index * 260, Y, 21), FVector(35, 35, 10));
+        const float A = Segment * PI / 18.f;
+        const float B = (Segment + 1) * PI / 18.f;
+        Beam(Teal, ArchCenter + FVector(FMath::Cos(A) * 440, 0, FMath::Sin(A) * 440),
+            ArchCenter + FVector(FMath::Cos(B) * 440, 0, FMath::Sin(B) * 440), 52.f);
     }
-    // Monumental rear aqueduct arches, layered behind the usable ground.
-    for (int32 Arch = 0; Arch < 3; ++Arch)
+    for (float Side : {-1.f, 1.f})
+        Add(Stone, ArchCenter + FVector(Side * 440, 0, -55), FVector(70, 110, 230));
+    Add(Stone, ArchCenter + FVector(0, 0, 495), FVector(1060, 145, 45));
+    Add(Light, ArchCenter + FVector(0, -35, 470), FVector(155, 8, 12));
+
+    // The front court has only low, readable detail. Tall ornaments live at
+    // the rear court and exit, leaving the asymmetrical playable wings visible.
+    for (const FVector& Seat : {FVector(1430, -680, 24), FVector(1930, -680, 24), FVector(2200, 690, 24)})
     {
-        const float CenterX = -850 + Arch * 850.f;
-        for (int32 Segment = 0; Segment < 12; ++Segment)
-        {
-            const float A = Segment * PI / 12.f;
-            const float B = (Segment + 1) * PI / 12.f;
-            Beam(Teal, FVector(CenterX + FMath::Cos(A) * 350, 690, 150 + FMath::Sin(A) * 350),
-                FVector(CenterX + FMath::Cos(B) * 350, 690, 150 + FMath::Sin(B) * 350), 50.f);
-        }
-        for (float Side : {-1.f, 1.f})
-            Add(Stone, FVector(CenterX + Side * 350, 690, 45), FVector(65, 90, 210));
-        Add(PaleStone, FVector(CenterX, 690, 530), FVector(820, 120, 45));
+        Add(Stone, Seat, FVector(170, 55, 48));
+        Add(Teal, Seat + FVector(0, 0, 25), FVector(185, 65, 8));
     }
-    for (int32 Index = 0; Index < 11; ++Index)
+    for (int32 Index = 0; Index < 3; ++Index)
     {
-        const float X = -1250 + Index * 250.f;
-        const float Height = 330.f + FMath::Cos(Index * .7f) * 35.f;
-        Beam(Brass, FVector(X, 490, 500), FVector(X, 490, Height + 25), 4.f);
-        Add(Lamp, FVector(X, 490, Height), FVector(36, 32, 48));
-        Add(Brass, FVector(X, 490, Height + 28), FVector(45, 40, 8));
+        const float X = 1640.f + Index * 270.f;
+        const float Height = 330.f + (Index == 1 ? 60.f : 0.f);
+        Beam(Brass, FVector(X, 740, 500), FVector(X, 740, Height + 28), 5.f);
+        Add(Lamp, FVector(X, 740, Height), FVector(45, 40, 65));
+        Add(Brass, FVector(X, 740, Height + 35), FVector(55, 48, 8));
     }
-    Beam(Brass, FVector(-1340, 490, 500), FVector(1340, 490, 500), 6.f);
-    // A keeper's pavilion and an illuminated exit gate frame story interactions.
-    for (float X : {-1300.f, -900.f}) Add(Teal, FVector(X, 530, 130), FVector(32, 32, 260));
-    Add(Roof, FVector(-1100, 530, 310), FVector(560, 330, 150));
-    Add(Stone, FVector(-1100, 540, 90), FVector(300, 35, 180));
-    Add(Brass, FVector(1240, 460, 225), FVector(260, 35, 30));
+    Beam(Brass, FVector(1580, 740, 500), FVector(2270, 740, 500), 7.f);
+    // Small memory tablets identify the two courts without blocking the route.
+    Add(Teal, FVector(1450, -710, 15), FVector(85, 15, 30));
+    Add(Teal, FVector(2160, 710, 90), FVector(85, 18, 180));
+    Add(Light, FVector(2160, 696, 135), FVector(55, 5, 10));
+
+    // Landmark B: the unique terminal lamp gate. No row of identical arches.
+    for (float Y : {-300.f, 300.f})
+    {
+        Add(Teal, FVector(2440, Y, 175), FVector(38, 38, 350));
+        Add(Brass, FVector(2440, Y, 350), FVector(75, 75, 18));
+    }
+    Beam(Teal, FVector(2440, -330, 380), FVector(2440, 330, 380), 48.f);
+    Add(Lamp, FVector(2440, 0, 315), FVector(95, 70, 125));
+    Add(Brass, FVector(2440, 0, 385), FVector(120, 95, 15));
+
+    // Guardhouse: one warm entry silhouette, deliberately smaller than the gate.
+    for (float X : {-1280.f, -920.f}) Add(Teal, FVector(X, 480, 125), FVector(28, 28, 250));
+    Add(Roof, FVector(-1100, 480, 300), FVector(520, 300, 145));
+    Add(Stone, FVector(-1100, 510, 90), FVector(290, 25, 180));
+    Add(Light, FVector(-1100, 460, 225), FVector(70, 12, 18));
     BuildRouteMarkers(Brass, Light);
-    AddLamp(FVector(-1100, 160, 230), FLinearColor(1.f, .78f, .45f));
-    AddLamp(FVector(1090, 140, 230), FLinearColor(.6f, .85f, 1.f));
+    AddLamp(FVector(-1100, 160, 235), FLinearColor(1.f, .85f, .62f));
+    AddLamp(FVector(1860, 100, 270), FLinearColor(.65f, .9f, 1.f));
 }

@@ -143,10 +143,17 @@ void UAlphaCharacterVisualComponent::RefreshAppearance(int32 Hero, bool bEnemy, 
         : (HeroType == 0 ? FLinearColor(0.6f, 0.025f, 0.055f)
         : (HeroType == 1 ? FLinearColor(0.025f, 0.5f, 0.42f) : FLinearColor(0.75f, 0.52f, 0.13f)));
     ClothMaterial = MakeMaterial(bEnemyVisual ? FLinearColor(0.095f, 0.07f, 0.06f) : Accent * 0.7f, 0.02f, 0.78f);
-    MetalMaterial = MakeMaterial(FLinearColor(0.13f, 0.16f, 0.18f), 0.78f, 0.3f);
+    MetalMaterial = MakeMaterial(FLinearColor(.23f, .3f, .38f), .25f, .55f);
     AccentMaterial = MakeMaterial(Accent, bEnemyVisual ? 0.65f : 0.35f, 0.42f);
     FaceMaterial = MakeMaterial(bEnemyVisual ? FLinearColor(0.74f, 0.67f, 0.49f) : FLinearColor(0.7f, 0.55f, 0.37f), 0.08f, 0.7f);
     GlowMaterial = MakeMaterial(bEnemyVisual ? FLinearColor(1.0f, 0.19f, 0.02f) : Accent * 1.6f, 0.2f, 0.3f, bBossVisual ? 4.0f : 2.2f);
+    // Keep skin and energy clean; only garments receive restrained woven detail.
+    for (UMaterialInstanceDynamic* Garment : {ClothMaterial.Get(), AccentMaterial.Get()})
+    {
+        if (!Garment) continue;
+        Garment->SetScalarParameterValue(TEXT("SurfaceStyle"), 3.f);
+        Garment->SetScalarParameterValue(TEXT("TextureStrength"), .18f);
+    }
     BuildSilhouette();
     BuildWeapon();
     if (!bEnemyVisual) BuildAnimeDetails();

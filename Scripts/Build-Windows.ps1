@@ -11,7 +11,8 @@ $UAT = Join-Path $EngineRoot 'Engine/Build/BatchFiles/RunUAT.bat'
 if (!(Test-Path $Build)) { throw 'EngineRoot must point to an installed Unreal Engine 5.6 directory.' }
 & $Build AlphaGameEditor Win64 Development "-Project=$Project" -WaitMutex
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-if ($Action -in @('Art', 'Package')) {
+# Every entry prepares art, including Build/Test on a clean checkout.
+if ($Action -in @('Build', 'Art', 'Test', 'Package')) {
     $ArtReport = Join-Path $ProjectRoot ('Artifacts/Art/' + [guid]::NewGuid().ToString() + '.json')
     $PreviousArtReport = $env:ALPHA_ART_REPORT
     try {
@@ -28,10 +29,11 @@ if ($Action -in @('Art', 'Package')) {
     $ArtResult = Get-Content -Raw $ArtReport | ConvertFrom-Json
     if ($ArtResult.status -ne 'saved' -or $ArtResult.generator -ne 'AlphaGame.Art.v1' -or
         $ArtResult.material -ne '/Game/Art/Materials/M_AlphaSurface' -or
-        $ArtResult.effects_material -ne '/Game/Art/Materials/M_AlphaEffect') {
+        $ArtResult.effects_material -ne '/Game/Art/Materials/M_AlphaEffect' -or
+        $ArtResult.revision -ne 3 -or $ArtResult.parameter_contract -ne 'checked') {
         throw "Art asset generation did not finish: $ArtReport"
     }
-    foreach ($ArtPackage in @('Materials/M_AlphaSurface', 'Materials/M_AlphaEffect', 'Textures/T_ForgeDetail', 'Textures/T_ForgeNormal_N')) {
+    foreach ($ArtPackage in @('Materials/M_AlphaSurface', 'Materials/M_AlphaEffect', 'Textures/T_ForgeDetail', 'Textures/T_ForgeNormal_N', 'Textures/T_AnimeSurfaceAtlas')) {
         if (!(Test-Path (Join-Path $ProjectRoot ("Content/Art/$ArtPackage.uasset")))) {
             throw "Art package is missing after save: $ArtPackage"
         }

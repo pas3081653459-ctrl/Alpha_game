@@ -7,6 +7,7 @@
 #include "Characters/AlphaEnemy.h"
 #include "Characters/Boss/AlphaForgeBoss.h"
 #include "Combat/AlphaCombatComponent.h"
+#include "Rules/LevelLayoutRules.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
@@ -62,6 +63,18 @@ bool FAlphaStoryAuthorityTest::RunTest(const FString& Parameters)
         TestFalse(TEXT("Repeated briefing cannot skip combat"), Mode->TalkToStoryNPC(Hero));
         if (!TestTrue(TEXT("Briefed human can begin encounters"), Mode->StartPrototypeRun())) return false;
         TestTrue(TEXT("Starting moves story into combat"), State->StoryStage == EAlphaStoryStage::Combat);
+        TestTrue(TEXT("Starting marks a real route objective before spawning"), State->bAwaitingRouteAdvance);
+        Mode->RouteReadyAt = 0.; // Skip only the presentation pause, retaining spatial validation.
+        Mode->CheckRound();
+        TestEqual(TEXT("Remaining near the guide does not spawn a remote encounter"), State->Wave, 0);
+        const auto MoveToEncounter = [&]()
+        {
+            Hero->SetActorLocation(State->RouteObjective + FVector(0, 0, 110));
+            Mode->RouteReadyAt = 0.;
+            Mode->CheckRound();
+        };
+        MoveToEncounter();
+        TestFalse(TEXT("A living human at the objective activates the encounter"), State->bAwaitingRouteAdvance);
         TestFalse(TEXT("Combat cannot accept story progression"), Mode->TalkToStoryNPC(Hero));
         TestFalse(TEXT("Combat cannot advance a chapter"), Mode->AdvanceChapter());
         for (int32 Wave = 1; Wave <= State->GetChapterWaveCount(); ++Wave)
@@ -73,12 +86,16 @@ bool FAlphaStoryAuthorityTest::RunTest(const FString& Parameters)
             // Exercise authoritative transition methods without advancing the
             // global engine frame or relying on a real-time three-second wait.
             World->GetTimerManager().ClearTimer(Mode->WaveTimer);
-            if (Wave < State->GetChapterWaveCount()) Mode->StartNextWave();
+            if (Wave < State->GetChapterWaveCount())
+            {
+                TestTrue(TEXT("A cleared wave queues a regroup objective"), State->bAwaitingRouteAdvance);
+                MoveToEncounter();
+            }
         }
         if (Chapter == 1)
         {
             TestTrue(TEXT("Forge reserves its boss after the third wave"), State->EncounterStage == EAlphaEncounterStage::Boss);
-            Mode->StartBossEncounter();
+            MoveToEncounter();
             if (!TestNotNull<AAlphaForgeBoss>(TEXT("Forge boss spawned"), State->ForgeBoss)) return false;
             TestTrue(TEXT("Boss uses the current chapter origin"), State->ForgeBoss->GetActorLocation().X > 6000.f);
             State->ForgeBoss->GetCombatComponent()->ReceiveHit(10000.f, 0.f, nullptr);
@@ -88,6 +105,7 @@ bool FAlphaStoryAuthorityTest::RunTest(const FString& Parameters)
         TestTrue(TEXT("Victory awaits an NPC debrief"), State->RoundState == EAlphaRoundState::Victory
             && State->StoryStage == EAlphaStoryStage::Debrief);
         TestFalse(TEXT("Victory alone cannot skip the debrief"), Mode->AdvanceChapter());
+        Hero->SetActorLocation(AAlphaGameState::GetChapterOrigin(Chapter) + FVector(-800, 0, 96));
         TestTrue(TEXT("Debrief completes the chapter"), Mode->TalkToStoryNPC(Hero));
         TestTrue(TEXT("Completion is shared state"), State->StoryStage == EAlphaStoryStage::Complete);
         if (Chapter < 2)

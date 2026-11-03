@@ -121,8 +121,21 @@ bool FAlphaCompanionWaitingAndTerminalTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("Waiting does not consume skill cooldown"), Bot->GetAbilityComponent()->GetSkillRemaining(0), 0.0f);
     Fixture.State->RoundState = EAlphaRoundState::Victory;
     Bot->Tick(0.11f);
+    TestTrue(TEXT("Victory companion follows the human back to the story guide"), Bot->GetCompanionAction() == EAlphaCompanionAction::Follow);
+    TestEqual(TEXT("Victory never resumes attacks on leftover enemies"), Enemy->GetCombatComponent()->GetHealth(), EnemyHealth);
+    Fixture.State->RoundState = EAlphaRoundState::Defeat;
+    Bot->Tick(0.11f);
     TestTrue(TEXT("Terminal state stops decisions"), Bot->GetCompanionAction() == EAlphaCompanionAction::Idle);
     TestTrue(TEXT("Terminal state clears movement input"), Bot->GetPendingMovementInputVector().IsNearlyZero());
+    Fixture.State->RoundState = EAlphaRoundState::Victory;
+    Enemy->SetActorLocation(FVector(1000,300,100));
+    Human->SetActorLocation(FVector(120,0,100));
+    Fixture.Down(Human);
+    Bot->Tick(.11f);
+    TestTrue(TEXT("A downed human can still be rescued after an AI wins the chapter"),
+        Bot->GetReviveComponent()->GetReviveTarget() == Human);
+    Fixture.CompleteRescue(Bot);
+    TestTrue(TEXT("Post-victory rescue restores story interaction eligibility"), Human->GetCombatComponent()->IsAlive());
     return true;
 }
 

@@ -132,6 +132,26 @@ int main()
     CameraTests();
     BlendTests();
     EnvelopeTests();
+    using AlphaPresentation::RouteCameraDistance;
+    const double RouteBase = RouteCameraDistance(900, 100, 100, 16./9.);
+    Check(RouteCameraDistance(900, 650, 100, 16./9.) >= RouteBase, "side gardens never reduce vertical framing");
+    Check(RouteCameraDistance(900, 1000, 100, 16./9.) > RouteBase, "depth beyond existing camera capacity expands framing");
+    Check(RouteCameraDistance(900, 650, 700, 16./9.) >= RouteCameraDistance(900, 650, 100, 16./9.), "jump height never shrinks camera framing");
+    Check(RouteCameraDistance(2000, 100, 100, 16./9.) > RouteBase, "party separation expands horizontal framing");
+    Check(Near(RouteCameraDistance(-1,-1,-1,-1),RouteCameraDistance(0,0,0,.5)), "negative camera inputs clamp consistently");
+    for (double Invalid : {std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity(),
+        -std::numeric_limits<double>::infinity()})
+    {
+        Check(Near(RouteCameraDistance(Invalid,0,0,1),2800), "invalid width uses safe route camera default");
+        Check(Near(RouteCameraDistance(0,Invalid,0,1),2800), "invalid depth uses safe route camera default");
+        Check(Near(RouteCameraDistance(0,0,Invalid,1),2800), "invalid height uses safe route camera default");
+        Check(Near(RouteCameraDistance(0,0,0,Invalid),2800), "invalid aspect uses safe route camera default");
+    }
+    for (double Span : {0., 100., 1000., 10000., std::numeric_limits<double>::max()})
+    {
+        const double Distance = RouteCameraDistance(Span,Span,Span,4.);
+        Check(std::isfinite(Distance) && Distance>=2300. && Distance<=5200., "route camera is finite and bounded at extremes");
+    }
     using AlphaPresentation::DebrisHeight;
     Check(Near(DebrisHeight(8, 100, 250, 0), 8), "debris starts on surface contact");
     Check(DebrisHeight(8, 100, 250, .2) > 8, "fragment rises during initial impulse");

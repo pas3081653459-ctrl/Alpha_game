@@ -4,6 +4,7 @@ Creates the generated master material and imports original source textures.
 Only this generator's tagged assets may be refreshed. Duplicate an asset before
 hand-editing it if those edits must survive regeneration.
 """
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -16,6 +17,8 @@ GENERATOR = 'AlphaGame.Art.v1'
 MATERIAL_PATH = '/Game/Art/Materials/M_AlphaSurface'
 EFFECT_PATH = '/Game/Art/Materials/M_AlphaEffect'
 TEXTURE_PATH = '/Game/Art/Textures'
+ATLAS_SOURCE = ROOT / 'SourceArt/Anime/T_AnimeSurfaceAtlas.png'
+ART_REVISION = 3
 LIB = unreal.EditorAssetLibrary
 EDIT = unreal.MaterialEditingLibrary
 
@@ -29,11 +32,11 @@ def check_owned(path):
     return None
 
 
-def import_texture(filename, name, normal=False):
+def import_texture(filename, name, normal=False, color=False, source_folder="Surfaces"):
     path = f'{TEXTURE_PATH}/{name}'
     check_owned(path)
     task = unreal.AssetImportTask()
-    task.set_editor_property('filename', str(ROOT / 'SourceArt/Surfaces' / filename))
+    task.set_editor_property('filename', str(ROOT / 'SourceArt' / source_folder / filename))
     task.set_editor_property('destination_path', TEXTURE_PATH)
     task.set_editor_property('destination_name', name)
     task.set_editor_property('automated', True)
@@ -43,9 +46,10 @@ def import_texture(filename, name, normal=False):
     texture = LIB.load_asset(path)
     if not texture:
         raise RuntimeError(f'Texture import failed: {filename}')
-    texture.set_editor_property('srgb', False)
+    texture.set_editor_property('srgb', color)
     texture.set_editor_property('compression_settings',
-        unreal.TextureCompressionSettings.TC_NORMALMAP if normal else unreal.TextureCompressionSettings.TC_MASKS)
+        unreal.TextureCompressionSettings.TC_NORMALMAP if normal else (
+            unreal.TextureCompressionSettings.TC_DEFAULT if color else unreal.TextureCompressionSettings.TC_MASKS))
     LIB.set_metadata_tag(texture, TAG, GENERATOR)
     if not LIB.save_loaded_asset(texture, False):
         raise RuntimeError(f'Texture save failed: {path}')
@@ -171,6 +175,104 @@ def create_effect_material():
     connect(gain, '', emission, 'B')
     property_link(emission, '', unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     save_material(material, EFFECT_PATH)
+    validate_parameters(material, EFFECT_PATH, vector=('Tint',), scalar=('Glow',))
+
+
+def source_fingerprint():
+    paths = [Path(__file__), ROOT / 'SourceArt/Surfaces/T_ForgeDetail.png',
+             ROOT / 'SourceArt/Surfaces/T_ForgeNormal_N.png', ATLAS_SOURCE]
+    digest = hashlib.sha256()
+    for path in paths:
+        if not path.is_file():
+            raise RuntimeError(f'Required source art is missing: {path}')
+        digest.update(path.relative_to(ROOT).as_posix().encode('utf-8'))
+        digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+def validate_parameters(material, path, vector=(), scalar=(), texture=()):
+    # A saved package alone does not establish that runtime parameters exist.
+    actual = {
+        'vector': set(map(str, EDIT.get_vector_parameter_names(material))),
+        'scalar': set(map(str, EDIT.get_scalar_parameter_names(material))),
+        'texture': set(map(str, EDIT.get_texture_parameter_names(material))),
+    }
+    for kind, expected in (('vector', vector), ('scalar', scalar), ('texture', texture)):
+        missing = set(expected) - actual[kind]
+        if missing:
+            raise RuntimeError(f'{path} missing {kind} parameters: {sorted(missing)}')
+
+
+def atlas_color(material, tint, atlas):
+    # Crop safely INSIDE a 2x2 atlas tile; source corners do not bleed across cells.
+    # 0 wood, 1 ivory stone, 2 teal ceramic, 3 crimson cloth. Characters default
+    # TextureStrength=0, so skin/armor never inherit a wood color by accident.
+    uv = expression(material, unreal.MaterialExpressionTextureCoordinate, -1600, -700)
+    repeat = expression(material, unreal.MaterialExpressionFrac, -1400, -700)
+    connect(uv, '', repeat, 'Input')
+    inset = expression(material, unreal.MaterialExpressionMultiply, -1200, -700, const_b=.46)
+    connect(repeat, '', inset, 'A')
+    margin = expression(material, unreal.MaterialExpressionAdd, -1000, -700, const_b=.02)
+    connect(inset, '', margin, 'A')
+    style = expression(material, unreal.MaterialExpressionScalarParameter, -1600, -450,
+                       parameter_name='SurfaceStyle', default_value=0.)
+    two = expression(material, unreal.MaterialExpressionConstant, -1600, -300, r=2.)
+    column = expression(material, unreal.MaterialExpressionFmod, -1400, -450)
+    connect(style, '', column, 'A')
+    connect(two, '', column, 'B')
+    half = expression(material, unreal.MaterialExpressionMultiply, -1400, -250, const_b=.5)
+    connect(style, '', half, 'A')
+    row = expression(material, unreal.MaterialExpressionFloor, -1200, -250)
+    connect(half, '', row, 'Input')
+    cell = expression(material, unreal.MaterialExpressionAppendVector, -1000, -450)
+    connect(column, '', cell, 'A')
+    connect(row, '', cell, 'B')
+    cell_scale = expression(material, unreal.MaterialExpressionMultiply, -800, -450, const_b=.5)
+    connect(cell, '', cell_scale, 'A')
+    coordinates = expression(material, unreal.MaterialExpressionAdd, -600, -650)
+    connect(margin, '', coordinates, 'A')
+    connect(cell_scale, '', coordinates, 'B')
+    sample = expression(material, unreal.MaterialExpressionTextureSampleParameter2D, -400, -650,
+                        parameter_name='SurfaceAtlas', texture=atlas,
+                        sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
+    connect(coordinates, '', sample, 'UVs')
+    strength = expression(material, unreal.MaterialExpressionScalarParameter, -400, -400,
+                          parameter_name='TextureStrength', default_value=0.)
+    blend = expression(material, unreal.MaterialExpressionLinearInterpolate, -200, -450)
+    connect(tint, 'RGB', blend, 'A')
+    connect(sample, 'RGB', blend, 'B')
+    connect(strength, '', blend, 'Alpha')
+    return blend
+
+
+def flat_color_outputs(material, base, emission, tint, metallic, roughness):
+    # Diagnostic isolation: no diffuse/specular lighting contribution, while
+    # retaining DefaultLit for the normal mode. Flat color intentionally ignores
+    # textures, glow, bands and rim so the runtime Tint can be checked directly.
+    flat = expression(material, unreal.MaterialExpressionScalarParameter, 1400, -650,
+                      parameter_name='FlatColor', default_value=0.)
+    black = expression(material, unreal.MaterialExpressionConstant, 1400, -450, r=0.)
+    matte = expression(material, unreal.MaterialExpressionConstant, 1400, -250, r=1.)
+    base_result = expression(material, unreal.MaterialExpressionLinearInterpolate, 1650, -650)
+    connect(base, '', base_result, 'A')
+    connect(black, '', base_result, 'B')
+    connect(flat, '', base_result, 'Alpha')
+    emission_result = expression(material, unreal.MaterialExpressionLinearInterpolate, 1650, -450)
+    connect(emission, '', emission_result, 'A')
+    connect(tint, 'RGB', emission_result, 'B')
+    connect(flat, '', emission_result, 'Alpha')
+    metal_result = expression(material, unreal.MaterialExpressionLinearInterpolate, 1650, -250)
+    connect(metallic, '', metal_result, 'A')
+    connect(black, '', metal_result, 'B')
+    connect(flat, '', metal_result, 'Alpha')
+    rough_result = expression(material, unreal.MaterialExpressionLinearInterpolate, 1650, -50)
+    connect(roughness, '', rough_result, 'A')
+    connect(matte, '', rough_result, 'B')
+    connect(flat, '', rough_result, 'Alpha')
+    specular_result = expression(material, unreal.MaterialExpressionLinearInterpolate, 1650, 150, const_a=.5)
+    connect(black, '', specular_result, 'B')
+    connect(flat, '', specular_result, 'Alpha')
+    return base_result, emission_result, metal_result, rough_result, specular_result
 
 
 def main():
@@ -178,6 +280,7 @@ def main():
     LIB.make_directory(TEXTURE_PATH)
     detail = import_texture('T_ForgeDetail.png', 'T_ForgeDetail')
     normal = import_texture('T_ForgeNormal_N.png', 'T_ForgeNormal_N', True)
+    atlas = import_texture('T_AnimeSurfaceAtlas.png', 'T_AnimeSurfaceAtlas', color=True, source_folder='Anime')
     material = create_material(MATERIAL_PATH)
     material.set_editor_property('shading_model', unreal.MaterialShadingModel.MSM_DEFAULT_LIT)
     tint = expression(material, unreal.MaterialExpressionVectorParameter, -700, -250,
@@ -197,7 +300,8 @@ def main():
     detail_bias = expression(material, unreal.MaterialExpressionAdd, -250, 350, const_b=.82)
     connect(detail_scale, '', detail_bias, 'A')
     base = expression(material, unreal.MaterialExpressionMultiply, 0, -200)
-    connect(tint, '', base, 'A')
+    textured_tint = atlas_color(material, tint, atlas)
+    connect(textured_tint, '', base, 'A')
     connect(detail_bias, '', base, 'B')
     emission = expression(material, unreal.MaterialExpressionMultiply, -100, -50)
     connect(tint, '', emission, 'A')
@@ -206,18 +310,25 @@ def main():
                                parameter_name='NormalTexture', texture=normal,
                                sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
     base, emission = toon_color(material, base, tint, emission)
+    base, emission, metallic, roughness, specular = flat_color_outputs(material, base, emission, tint, metallic, roughness)
     property_link(base, '', unreal.MaterialProperty.MP_BASE_COLOR)
     property_link(metallic, '', unreal.MaterialProperty.MP_METALLIC)
     property_link(roughness, '', unreal.MaterialProperty.MP_ROUGHNESS)
+    property_link(specular, '', unreal.MaterialProperty.MP_SPECULAR)
     property_link(emission, '', unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     property_link(normal_sample, 'RGB', unreal.MaterialProperty.MP_NORMAL)
     save_material(material, MATERIAL_PATH)
+    validate_parameters(material, MATERIAL_PATH, vector=('Tint',),
+                        scalar=('Metallic', 'Roughness', 'Glow', 'AnimeShade', 'AmbientFill', 'SurfaceStyle', 'TextureStrength', 'FlatColor'),
+                        texture=('SurfaceAtlas', 'DetailTexture', 'NormalTexture'))
     create_effect_material()
     report = {
         'generator': GENERATOR, 'material': MATERIAL_PATH, 'effects_material': EFFECT_PATH,
-        'textures': [TEXTURE_PATH + '/T_ForgeDetail', TEXTURE_PATH + '/T_ForgeNormal_N'],
-        'parameters': ['Tint', 'Metallic', 'Roughness', 'Glow', 'AnimeShade', 'RimStrength', 'AmbientFill'],
+        'textures': [TEXTURE_PATH + '/T_ForgeDetail', TEXTURE_PATH + '/T_ForgeNormal_N', TEXTURE_PATH + '/T_AnimeSurfaceAtlas'],
+        'parameters': ['Tint', 'Metallic', 'Roughness', 'Glow', 'AnimeShade', 'RimStrength', 'AmbientFill', 'SurfaceStyle', 'TextureStrength', 'FlatColor'],
         'style': 'DefaultLit graphic bands and rim; separate opaque unlit energy effects',
+        'revision': ART_REVISION, 'source_fingerprint': source_fingerprint(),
+        'parameter_contract': 'checked',
         'status': 'saved', 'note': 'Asset save is not a rendered visual or packaging verification.',
     }
     report_path = Path(os.environ.get('ALPHA_ART_REPORT', str(ROOT / 'Saved/ArtBuild.json')))

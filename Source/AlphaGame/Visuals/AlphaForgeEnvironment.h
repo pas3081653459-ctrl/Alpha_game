@@ -18,7 +18,8 @@ public:
 
 private:
     UInstancedStaticMeshComponent* MakeBatch(EAlphaPrimitive Shape, const FLinearColor& Tint,
-        float Metallic = 0.f, float Roughness = .6f, float Glow = 0.f);
+        float Metallic = 0.f, float Roughness = .6f, float Glow = 0.f,
+        int32 SurfaceStyle = 0, float TextureStrength = 0.f);
     static void Add(UInstancedStaticMeshComponent* Batch, const FVector& Position,
         const FVector& Scale, const FRotator& Rotation = FRotator::ZeroRotator);
     static void Bar(UInstancedStaticMeshComponent* Batch, const FVector& Start,

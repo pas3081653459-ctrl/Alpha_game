@@ -58,33 +58,53 @@ void AAlphaCombatCamera::Tick(float DeltaSeconds)
     }
     float MinimumX = TNumericLimits<float>::Max();
     float MaximumX = -TNumericLimits<float>::Max();
-    const auto Include = [&MinimumX, &MaximumX](float X)
+    float MinimumY = TNumericLimits<float>::Max();
+    float MaximumY = -TNumericLimits<float>::Max();
+    float MinimumZ = TNumericLimits<float>::Max();
+    float MaximumZ = -TNumericLimits<float>::Max();
+    const auto Include = [&MinimumX, &MaximumX, &MinimumY, &MaximumY, &MinimumZ, &MaximumZ, ChapterOrigin](const FVector& Location)
     {
-        MinimumX = FMath::Min(MinimumX, X);
-        MaximumX = FMath::Max(MaximumX, X);
+        const FVector Local = Location - ChapterOrigin;
+        // All three regions coexist in one world. Never frame a pawn in a
+        // different chapter while replication catches up with party travel.
+        if (Local.ContainsNaN() || Local.X < -1650. || Local.X > 2750. || FMath::Abs(Local.Y) > 900.) return;
+        MinimumX = FMath::Min(MinimumX, static_cast<float>(Location.X));
+        MaximumX = FMath::Max(MaximumX, static_cast<float>(Location.X));
+        MinimumY = FMath::Min(MinimumY, static_cast<float>(Location.Y));
+        MaximumY = FMath::Max(MaximumY, static_cast<float>(Location.Y));
+        MinimumZ = FMath::Min(MinimumZ, static_cast<float>(Location.Z));
+        MaximumZ = FMath::Max(MaximumZ, static_cast<float>(Location.Z));
     };
     for (TActorIterator<AAlphaCharacter> It(GetWorld()); It; ++It)
     {
         // Downed teammates stay in frame so rescuers can locate them.
         // Remote player controllers do not exist on every client. Team is replicated.
-        if (It->GetCombatComponent()->TeamId == 1
-            && FMath::Abs(It->GetActorLocation().X - ChapterOrigin.X) < 1700.)
-            Include(static_cast<float>(It->GetActorLocation().X));
+        if (It->GetCombatComponent()->TeamId == 1) Include(It->GetActorLocation());
     }
     if (const AAlphaGameState* State = GetWorld()->GetGameState<AAlphaGameState>())
     {
         if (IsValid(State->ForgeBoss) && State->ForgeBoss->GetCombatComponent()->IsAlive())
-            Include(static_cast<float>(State->ForgeBoss->GetActorLocation().X));
+            Include(State->ForgeBoss->GetActorLocation());
     }
-    if (MinimumX > MaximumX) MinimumX = MaximumX = static_cast<float>(ChapterOrigin.X);
+    if (MinimumX > MaximumX)
+    {
+        MinimumX = MaximumX = static_cast<float>(ChapterOrigin.X) - 650.f;
+        MinimumY = MaximumY = 0.f;
+        MinimumZ = MaximumZ = 100.f;
+    }
     const float CenterX = FMath::Clamp((MinimumX + MaximumX) * .5f,
-        static_cast<float>(ChapterOrigin.X) - 350.f, static_cast<float>(ChapterOrigin.X) + 350.f);
+        static_cast<float>(ChapterOrigin.X) - 800.f, static_cast<float>(ChapterOrigin.X) + 2100.f);
+    const float CenterY = FMath::Clamp((MinimumY + MaximumY) * .5f, -250.f, 250.f);
+    const float CenterZ = FMath::Clamp((MinimumZ + MaximumZ) * .5f + 35.f, 120.f, 300.f);
     const float HalfWidth = FMath::Max(FMath::Abs(MinimumX - CenterX), FMath::Abs(MaximumX - CenterX));
+    const float HalfDepth = FMath::Max(FMath::Abs(MinimumY - CenterY), FMath::Abs(MaximumY - CenterY));
     int32 Width = 0, Height = 0;
     Player->GetViewportSize(Width, Height);
     const double Aspect = Width > 0 && Height > 0 ? static_cast<double>(Width) / Height : 16. / 9.;
-    const double DesiredDistance = AlphaPresentation::CameraDistance(HalfWidth * 2., Aspect);
-    const FVector DesiredFocus(CenterX, 70, 120);
+    // At the camera's ~21 degree tilt, world-depth contributes to screen
+    // height. Include it alongside jump/head space, particularly on ultrawide.
+    const double DesiredDistance = AlphaPresentation::RouteCameraDistance(HalfWidth, HalfDepth, MaximumZ - MinimumZ, Aspect);
+    const FVector DesiredFocus(CenterX, CenterY, CenterZ);
     const double Weight = bInitialized ? AlphaPresentation::BlendWeight(DeltaSeconds, 3.5) : 1.;
     SmoothedFocus = FMath::Lerp(SmoothedFocus, DesiredFocus, Weight);
     SmoothedDistance = FMath::Lerp(SmoothedDistance, DesiredDistance, Weight);

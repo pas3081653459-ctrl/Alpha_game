@@ -6,10 +6,10 @@
 
 | 检查 | 结果 | 能证明什么 |
 |---|---|---|
-| `python3 Scripts/check_project.py` | 通过 | 工程描述、50 个必要文件、27 个头文件、输入与本地 include、入口配置；发现 37 项不同的 UE 测试名称 |
+| `python3 Scripts/check_project.py` | 通过 | 工程描述、59 个必要文件、29 个头文件、输入与本地 include、入口配置；发现 38 项不同的 UE 测试名称 |
 | `python3 Scripts/run_rules_tests.py` | 222/222 通过 | 实际共享规则在严格 C++17 编译器中的行为 |
 | `python3 Scripts/run_rules_tests.py --sanitize` | 222/222 通过，无 UBSan 报告 | 同一规则的未定义行为检查 |
-| `python3 Scripts/run_presentation_tests.py` / `--sanitize` | 各298/298通过 | 实际用于镜头距离、平滑、效果衰减的纯计算 |
+| `python3 Scripts/run_presentation_tests.py` / `--sanitize` | 各320/320通过 | 实际用于镜头距离、平滑、效果衰减的纯计算 |
 | Python 脚本语法检查 | 通过 | 当前两项 Python 检查脚本可解析 |
 | 新增源码与文档文本检查 | 通过 | UTF-8、行尾空白和冲突标记 |
 | `git diff --check` | 通过 | 当前跟踪变更未发现空白错误；新增未跟踪文件另做逐文件检查 |
@@ -31,7 +31,7 @@
 
 ## UE 测试：源码已写，全部未执行
 
-当前共 37 项：Combat 8 项、Combo 6 项、Movement 1 项、Coop 5 项、Abilities 5 项、Encounter 2 项、Companion 6 项、Party 1 项、Environment 1 项、Story 2 项。
+当前共 38 项：Combat 8 项、Combo 6 项、Movement 1 项、Coop 5 项、Abilities 5 项、Encounter 2 项、Companion 6 项、Party 1 项、Environment 1 项、Story 2 项、LevelLayout 1 项。
 
 包括伤害/友伤/死亡重置/无敌/救起/硬直、救援恢复/独占/受击/距离/断线/遮挡、技能冷却/非法输入/合作资源，以及 Boss 攻击区域/阶段/人数缩放/防止重复配置回血。
 
@@ -44,7 +44,7 @@
 - 当前 Linux 云机器没有 Unreal Editor、UnrealBuildTool 或 Windows 工具链。没有生成 EXE，没有运行图形、物理命中或三台真实 Windows 设备联机。
 - 正式手工模型、骨骼动画、声音和完整关卡尚未制作；已有程序化造型与网格技能效果。完整主材质 `.uasset` 仍需在引擎运行 Art 生成步骤。
 
-下一执行入口是 README 的 Windows 构建命令。先取得真实 UHT/UBT 结果，再运行 37 项 UE 测试与完整单人/三机流程，按 `ACCEPTANCE.md` 留存日志。引擎验收通过后，按 `PROJECT_PLAN.md` 自动进入工坊垂直切片的动作与美术制作，避免基于未经运行的接口批量生产内容。
+下一执行入口是 README 的 Windows 构建命令。先取得真实 UHT/UBT 结果，再运行 38 项 UE 测试与完整单人/三机流程，按 `ACCEPTANCE.md` 留存日志。引擎验收通过后，按 `PROJECT_PLAN.md` 自动进入工坊垂直切片的动作与美术制作，避免基于未经运行的接口批量生产内容。
 
 ## 美术增量验证
 
@@ -112,3 +112,12 @@
 - 新增真实NPC范围/高度/LOS/真人/存活测试以及完整三章GameMode权威流程测试源码；对话RPC使用章节/阶段/重开版本号快照并在完成时重验，重复完成不推进。
 - 中文启动/角色/组队菜单与分页对话代码已接入，取消不推进，长按按键不跳过多页；F交谈/E救援无冲突。
 - UE5.6编译、UMG布局、CJK字体、材质渲染、三章迁移、对话复制时序和打包尚未执行。共享规则不能替代这些验收。
+
+## 关卡规划、贴图与黑色材质问题
+
+- 先由关卡设计子智能体完成 `LEVEL_REDESIGN_PLAN.md`，评审通过后再实现；参考同类作品的空间/节奏原则，未复制地图或资产，也未声称联网调研。
+- 可确认缺陷：可选生成材质缺失时静默回退、错误假定fallback可Tint、缺失结果长期缓存。当前改参数契约检查/日志与屏幕提示/定时重试，新增自动生成入口及Mac包装；截图唯一原因仍需本机shader日志确认。
+- 本轮实际生成原创1254×1254彩色Atlas，源图SHA及尺寸已核对，按木/石/瓷/布接入；不是实机截图。生成资产共5个、revision3，报告只能证明参数/保存。
+- 主路改为真实非矩形union，地板/边界/可见面同源；低台30cm真实碰撞，AI/敌人/Boss路由、镜头、出生点与遇敌集结门槛同步。旧整块底板已移除。
+- 严格C++17与各自UBSan通过：战斗222、视觉320、AI784、操作1174、剧情510、布局5440，总8450项。38项UE测试源码未执行，包括新增桥外无隐形底板/连接无内墙/侧庭/低台。
+- Python语法、Shell语法、源图清单校验、工程一致性与diff检查通过。未有UE编译、Python API实际执行、shader编译、场景渲染、实际AI走图与三机验收。不能把source/parameter ready当作美术验收。

@@ -36,3 +36,7 @@ jobs:
         run: python3 Scripts/run_story_tests.py
       - name: Check undefined behavior in story rules
         run: python3 Scripts/run_story_tests.py --sanitize
+      - name: Compile and run level layout and route rules
+        run: python3 Scripts/run_level_layout_tests.py
+      - name: Check undefined behavior in level layout rules
+        run: python3 Scripts/run_level_layout_tests.py --sanitize

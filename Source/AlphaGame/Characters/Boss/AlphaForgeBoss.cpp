@@ -1,6 +1,7 @@
 #include "Characters/Boss/AlphaForgeBoss.h"
 
 #include "AIController.h"
+#include "CollisionQueryParams.h"
 #include "Combat/AlphaCombatComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -15,7 +16,58 @@
 #include "GameFramework/GameStateBase.h"
 #include "Net/UnrealNetwork.h"
 #include "Rules/CombatRules.h"
+#include "Rules/LevelLayoutRules.h"
+#include "Visuals/AlphaArtLibrary.h"
 #include "Visuals/AlphaCharacterVisualComponent.h"
+#include "World/AlphaGameState.h"
+
+namespace AlphaForgeRoute
+{
+int32 Chapter(const UWorld* World)
+{
+    const AAlphaGameState* State = World ? World->GetGameState<AAlphaGameState>() : nullptr;
+    return State ? State->ChapterIndex : 0;
+}
+
+AlphaLayoutRules::Point Local(int32 ChapterIndex, const FVector& Location)
+{
+    const FVector Origin = AAlphaGameState::GetChapterOrigin(ChapterIndex);
+    return {Location.X - Origin.X, Location.Y - Origin.Y};
+}
+
+bool ClearAttack(const AActor* Source, const FVector& Origin, const AActor* Target)
+{
+    if (!Source || !Target || !Source->GetWorld() || Source->GetWorld() != Target->GetWorld()) return false;
+    UWorld* World = Source->GetWorld();
+    const int32 ChapterIndex = Chapter(World);
+    if (!AlphaLayoutRules::SegmentClear(ChapterIndex, Local(ChapterIndex, Origin),
+        Local(ChapterIndex, Target->GetActorLocation()), 0.)) return false;
+    FCollisionQueryParams Sight(SCENE_QUERY_STAT(AlphaForgeAttackSight), false, Source);
+    Sight.AddIgnoredActor(Target);
+    return !World->LineTraceTestByChannel(Origin, Target->GetActorLocation(), ECC_Visibility, Sight);
+}
+
+AlphaLayoutRules::Point Next(int32 ChapterIndex, AlphaLayoutRules::Point From, AlphaLayoutRules::Point Goal)
+{
+    // The boss capsule has a 65cm radius, larger than ordinary party capsules. Keep
+    // an 80cm clearance even when the shared party route offers a tighter cut.
+    constexpr double Margin = 80.;
+    From = AlphaLayoutRules::Project(ChapterIndex, From, Margin);
+    Goal = AlphaLayoutRules::Project(ChapterIndex, Goal, Margin);
+    if (AlphaLayoutRules::SegmentClear(ChapterIndex, From, Goal, Margin)) return Goal;
+    const AlphaLayoutRules::Point Candidate = AlphaLayoutRules::NextWaypoint(ChapterIndex, From, Goal);
+    if (AlphaLayoutRules::SegmentClear(ChapterIndex, From, Candidate, Margin)
+        && AlphaLayoutRules::DistanceSquared(From, Candidate) > 1.) return Candidate;
+    const AlphaLayoutRules::Point LaneFrom = AlphaLayoutRules::Project(ChapterIndex,
+        {From.X, AlphaLayoutRules::RouteCenterY(ChapterIndex, From.X)}, Margin);
+    if (AlphaLayoutRules::DistanceSquared(From, LaneFrom) > 1.
+        && AlphaLayoutRules::SegmentClear(ChapterIndex, From, LaneFrom, Margin)) return LaneFrom;
+    const AlphaLayoutRules::Point LaneGoal = AlphaLayoutRules::Project(ChapterIndex,
+        {Goal.X, AlphaLayoutRules::RouteCenterY(ChapterIndex, Goal.X)}, Margin);
+    const AlphaLayoutRules::Point LaneNext = AlphaLayoutRules::NextWaypoint(ChapterIndex, LaneFrom, LaneGoal);
+    return AlphaLayoutRules::SegmentClear(ChapterIndex, From, LaneNext, Margin) ? LaneNext : From;
+}
+}
 
 AAlphaForgeBoss::AAlphaForgeBoss()
 {
@@ -50,7 +102,8 @@ void AAlphaForgeBoss::BeginPlay()
 {
     Super::BeginPlay();
     CombatComponent->OnPoiseBroken.AddDynamic(this, &AAlphaForgeBoss::HandlePoiseBreak);
-    TelegraphMaterial = TelegraphMarkers->CreateAndSetMaterialInstanceDynamic(0);
+    TelegraphMaterial = AlphaArt::EffectMaterial(this, FLinearColor(1.f, .12f, .025f), .8f);
+    if (TelegraphMaterial) TelegraphMarkers->SetMaterial(0, TelegraphMaterial);
     // The modular visual component builds an oversized furnace hammer; gameplay capsule is unchanged.
 }
 
@@ -85,11 +138,14 @@ double AAlphaForgeBoss::ServerTime() const
 AAlphaCharacter* AAlphaForgeBoss::FindClosestLivingPlayer() const
 {
     AAlphaCharacter* Closest = nullptr;
+    const int32 ChapterIndex = AlphaForgeRoute::Chapter(GetWorld());
     float BestDistance = TNumericLimits<float>::Max();
     for (TActorIterator<AAlphaCharacter> It(GetWorld()); It; ++It)
     {
         AAlphaCharacter* Candidate = *It;
         if (!Candidate->IsCoopParticipant() || !Candidate->GetCombatComponent()->IsAlive()) continue;
+        if (!AlphaLayoutRules::IsWalkable(ChapterIndex,
+            AlphaForgeRoute::Local(ChapterIndex, Candidate->GetActorLocation()))) continue;
         const float Distance = FVector::DistSquared2D(GetActorLocation(), Candidate->GetActorLocation());
         if (Distance < BestDistance)
         {
@@ -130,9 +186,24 @@ void AAlphaForgeBoss::Tick(float DeltaSeconds)
     FVector Delta = Target->GetActorLocation() - GetActorLocation();
     Delta.Z = 0.f;
     FaceMoveIntent(Delta);
-    if (Delta.SizeSquared() > FMath::Square(650.f))
+    if (Delta.SizeSquared() > FMath::Square(650.f) || !AlphaForgeRoute::ClearAttack(this, GetActorLocation(), Target))
     {
-        AddMovementInput(Delta.GetSafeNormal());
+        RouteRefreshCountdown -= DeltaSeconds;
+        if (RouteRefreshCountdown <= 0.f || RoutedTarget.Get() != Target)
+        {
+            RouteRefreshCountdown = .15f;
+            RoutedTarget = Target;
+            const int32 ChapterIndex = AlphaForgeRoute::Chapter(GetWorld());
+            const AlphaLayoutRules::Point Waypoint = AlphaForgeRoute::Next(ChapterIndex,
+                AlphaForgeRoute::Local(ChapterIndex, GetActorLocation()), AlphaForgeRoute::Local(ChapterIndex, Target->GetActorLocation()));
+            RouteWaypoint = AAlphaGameState::GetChapterOrigin(ChapterIndex) + FVector(Waypoint.X, Waypoint.Y, 0.);
+        }
+        const FVector RouteDelta = RouteWaypoint - GetActorLocation();
+        if (RouteDelta.SizeSquared2D() > .25)
+        {
+            FaceMoveIntent(RouteDelta);
+            AddMovementInput(RouteDelta.GetSafeNormal2D());
+        }
     }
     else
     {
@@ -142,7 +213,8 @@ void AAlphaForgeBoss::Tick(float DeltaSeconds)
 
 void AAlphaForgeBoss::BeginAttack(AAlphaCharacter* Target)
 {
-    if (!HasAuthority() || !Target || !CombatComponent->CanAct()) return;
+    if (!HasAuthority() || !Target || !CombatComponent->CanAct()
+        || !AlphaForgeRoute::ClearAttack(this, GetActorLocation(), Target)) return;
     GetCharacterMovement()->StopMovementImmediately();
     FVector Direction = Target->GetActorLocation() - GetActorLocation();
     Direction.Z = 0.f;
@@ -156,7 +228,9 @@ void AAlphaForgeBoss::BeginAttack(AAlphaCharacter* Target)
     }
     TelegraphDirection = Direction;
     TelegraphOrigin = AttackType == EAlphaForgeAttack::Hammer ? Target->GetActorLocation() : GetActorLocation();
-    TelegraphOrigin.Z = 8.f;
+    const int32 ChapterIndex = AlphaForgeRoute::Chapter(GetWorld());
+    TelegraphOrigin.Z = AAlphaGameState::GetChapterOrigin(ChapterIndex).Z
+        + AlphaLayoutRules::SurfaceHeight(ChapterIndex, AlphaForgeRoute::Local(ChapterIndex, TelegraphOrigin)) + 8.f;
     const float BaseWindup = AttackType == EAlphaForgeAttack::Hammer ? 1.35f : (AttackType == EAlphaForgeAttack::FireLine ? 1.05f : .8f);
     AttackServerStartTime = ServerTime();
     AttackResolveTime = AttackServerStartTime + BaseWindup * 1.1f * (BossPhase == 2 ? .75f : 1.f);
@@ -183,7 +257,8 @@ void AAlphaForgeBoss::ResolveAttack()
     {
         AAlphaCharacter* Target = *It;
         if (!Target->IsCoopParticipant() || !Target->GetCombatComponent()->IsAlive()) continue;
-        if (IsPointInAttackZone(AttackType, TelegraphOrigin, TelegraphDirection, Target->GetActorLocation()))
+        if (IsPointInAttackZone(AttackType, TelegraphOrigin, TelegraphDirection, Target->GetActorLocation())
+            && AlphaForgeRoute::ClearAttack(this, FVector(TelegraphOrigin) + FVector(0, 0, 50), Target))
         {
             // ReceiveHit enforces team, life and dodge invulnerability on authority.
             Target->GetCombatComponent()->ReceiveHit(Damage, 25.f, this);
@@ -254,8 +329,11 @@ void AAlphaForgeBoss::UpdateTelegraph()
     const float Progress = FMath::Clamp(static_cast<float>((ServerTime() - AttackServerStartTime) / Duration), 0.f, 1.f);
     if (TelegraphMaterial)
     {
-        TelegraphMaterial->SetVectorParameterValue(TEXT("Color"), Progress > .7f
-            ? FLinearColor(1.f, .85f, .02f) : FLinearColor(1.f, .05f, .01f));
+        const FLinearColor Danger = Progress > .7f
+            ? FLinearColor(1.f, .85f, .02f) : FLinearColor(1.f, .12f, .025f);
+        TelegraphMaterial->SetVectorParameterValue(TEXT("Tint"), Danger);
+        TelegraphMaterial->SetVectorParameterValue(TEXT("Color"), Danger);
+        TelegraphMaterial->SetScalarParameterValue(TEXT("Glow"), .8f + Progress * .4f);
     }
     const auto Circle = [this, Origin](float Radius, int32 Segments, float Width)
     {

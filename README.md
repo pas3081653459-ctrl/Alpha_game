@@ -27,6 +27,8 @@ Windows 三人局域网 2.5D 合作动作闯关项目，使用 **Unreal Engine 5
 - 基于实际网格的斩击、聚怪、灯域、火星、破势和救援效果；暗青/黄铜 HUD。
 - 可重复生成的原始细节/法线纹理，以及 UE 编辑器主材质生成脚本。
 
+最新地图重设计先经专门关卡规划再编码，见 [关卡规划](Docs/LEVEL_REDESIGN_PLAN.md) 与 [路线示意图](Docs/Images/level-layout-plan.svg)；示意图不是实机截图。
+
 完整设计见 [GAME_DESIGN.md](Docs/GAME_DESIGN.md)，源码阶段记录见 [M1_PROGRESS.md](Docs/M1_PROGRESS.md)。
 
 ## 一个人测试三人合作
@@ -34,7 +36,7 @@ Windows 三人局域网 2.5D 合作动作闯关项目，使用 **Unreal Engine 5
 默认开启 **AI teammates**，一名真人补两名 AI、两名真人补一名 AI，三名真人不补位。AI 不占真人连接席位，并优先选择缺少的职业。
 
 1. 完成下方 Unreal 构建后，启动一个独立游戏窗口即可，不需要创建局域网房间或再开客户端。
-2. 在 Tab 房间面板确认 **AI teammates: ON**，选择职业，先关闭菜单，走到左侧NPC身边按 **F**，读完并确认任务；再按Tab点击“开始本章战斗”。
+2. 在 Tab 房间面板确认 **AI teammates: ON**，选择职业，先关闭菜单，走到左侧NPC身边按 **F**，读完并确认任务；再按Tab点击“开始本章战斗”，再沿HUD标记前往遭遇区，队伍集结后才刷怪。
 3. AI 会跟随、选择敌人、使用普通攻击和技能、尝试避开 Boss 预警，并救援倒地队友。头顶显示 AI 和当前行为。
 4. Development 构建中，可在开局后输入控制台命令 `TestDownSelf` 测试 AI 救援。保护状态下需要等待后重试；该命令在 Shipping 不生效。
 5. 需要纯单人对比时，重置回准备阶段，点击关闭补位，或执行 `SetBotFill 0`；`SetBotFill 1` 再次开启。
@@ -64,30 +66,40 @@ $Editor = 'C:\Program Files\Epic Games\UE_5.6\Engine\Binaries\Win64\UnrealEditor
 
 ## 生成美术材质
 
-两张原创纹理已位于 `SourceArt/Surfaces/`。UE 主材质需要在引擎环境生成；Windows 一键执行：
+两张规则细节纹理位于 `SourceArt/Surfaces/`，新增原创生成的彩色四格纹理位于 `SourceArt/Anime/`。UE 主材质需要在引擎环境生成；Windows 一键执行：
 
 ```powershell
 .\Scripts\Build-Windows.ps1 -EngineRoot 'C:\Program Files\Epic Games\UE_5.6' -Action Art
 ```
 
-该步骤先编译编辑器目标，再调用 `Scripts/create_art_assets.py` 导入纹理、创建参数材质，并核对本次保存报告和四个 `.uasset` 文件。`Package` 动作也会先执行该步骤。未在当前云环境运行。
+该步骤先编译编辑器目标，再调用 `Scripts/create_art_assets.py` 导入纹理、创建参数材质，并核对本次保存报告和五个 `.uasset` 文件。`Package` 动作也会先执行该步骤。未在当前云环境运行。
 
 插件已限定为编辑器用途：PythonScriptPlugin、EditorScriptingUtilities。只允许刷新带生成器标签的资产，遇到同名手工资源会停止。手工修改生成资源前应复制一份。修改后重启已经运行过游戏的编辑器，避免旧材质回退缓存。
 
-Mac 上也可用 UE5.6 编辑器 Python 执行同一个 `Scripts/create_art_assets.py`，但这里的 `.ps1` 包装只适用于 Windows，Mac 路径未实测。
+Mac 推荐一次完成编译与材质生成（关闭正在运行的编辑器）：
 
-生成前，几何和颜色使用引擎默认材质回退，**没有完整金属度、粗糙度、法线与发光效果**。当前提交包含原始 PNG 和生成脚本，不包含声称已烘焙的 `.uasset`。详细说明见 [美术实现](Docs/ART_IMPLEMENTATION.md)。
+```bash
+./Scripts/Build-Mac.sh "/Users/Shared/Epic Games/UE_5.6"
+```
+
+该脚本验证本次 revision 3 报告与五个生成资产；`Test` 参数另执行UE测试并逐项检查报告。云端仅做Shell语法检查，尚未在Mac运行。Windows `Build` / `Test` / `Package` 也会生成材质，减少漏跑步骤。
+
+编辑器启动时 `Content/Python/init_unreal.py` 按脚本和源图指纹自动生成/更新自有材质。首次打开请检查Python输出与材质编译状态；自动保存不等于shader通过。手工修改生成器管理的资产前应复制一份。
+
+**统一黑灰不能只靠加灯修复。** 旧版会静默退回引擎基础材质，并长期缓存缺失结果；这个回退并不保证支持`Tint`颜色参数。当前新增明确提示、参数检查与重试。控制台 `AlphaArtCheck` 查看表面/特效资产状态；`AlphaArtFlatColor 1` 以纯Tint隔离光照和贴图，`AlphaArtFlatColor 0`恢复正常。若诊断仍黑，应查看材质shader/Python错误与编辑器曝光，不能把“参数ready”视为渲染通过。生成资源后重启PIE，已有回退MID不会自动重建。
+
+四格Atlas以sRGB彩色导入，地板/青瓷/布帆/箱子实际使用，衣料仅少量织纹，皮肤不贴木纹。源图和校验见 `SourceArt/Anime/manifest.json`；不是引擎截图。详细说明见 [美术实现](Docs/ART_IMPLEMENTATION.md)。
 
 ## 单人或三人局域网流程
 
 1. 启动后显示中文菜单，选择职业。单人默认补齐AI；联机房主展开“局域网联机”并创建房间（会重新载入场景）。
 2. 两名客户端输入房主IPv4，例如 `192.168.1.10:7777`，点击加入；允许应用通过专用网络防火墙，默认UDP7777。
 3. 选择“进入场景”，走到左侧固定NPC附近，按 **F** 逐页交谈，读完选择确认。Esc退出不推进；对话不暂停联机世界。
-4. 房主/单人按Tab，点击“开始本章战斗”。任何真人都可完成当前章节交谈；只有房主开战和推进地图。
+4. 房主/单人按Tab，点击“开始本章战斗”，再沿HUD标记前往遭遇区，队伍集结后才刷怪。任何真人都可完成当前章节交谈；只有房主开战和推进地图。
 5. 清完本章敌人（工坊还需打败铸炉官），返回NPC按F听取战后线索并确认，房主再从菜单点击“前往下一章”。
 6. 全队迁移到独立地区，镜头与AI跟随新坐标；第三章交谈后收束本次路线。重开保留当前章，重新交谈接任务。
 
-三章均为程序化平坦遭遇区域，非三张正式手工地图或无缝探索大世界。固定NPC提供剧情门槛，不具备配音、分支任务、存档、实际护送/灯阵解谜或复杂行程。设计与验收见 [三章地图与剧情](Docs/CHAPTER_DESIGN.md)。
+三章是具有不同非矩形可走轮廓、窄宽连接和侧庭的程序化地区，码头有30cm真实低台；非三张正式手工地图或无缝探索大世界。固定NPC提供剧情门槛，不具备配音、分支任务、存档、实际护送/灯阵解谜或复杂行程。设计与验收见 [三章地图与剧情](Docs/CHAPTER_DESIGN.md)。
 
 战斗和间歇期间拒绝新加入，包括掉线重连。玩家需要等到准备或结算阶段再加入。人数缩放固定在开局，掉线不会让 Boss 回血。未实现房间自动发现、房主迁移或战斗状态恢复。
 
@@ -125,10 +137,12 @@ python3 Scripts/run_player_control_tests.py
 python3 Scripts/run_player_control_tests.py --sanitize
 python3 Scripts/run_story_tests.py
 python3 Scripts/run_story_tests.py --sanitize
+python3 Scripts/run_level_layout_tests.py
+python3 Scripts/run_level_layout_tests.py --sanitize
 ```
 
 - 工程一致性检查通过。
-- 标准 C++17 战斗规则 **222/222 通过**、镜头/效果规则 **298/298 通过**，两套 UBSan 检查也通过；另有 AI 决策与技能体积规则 **784/784 通过**（含 UBSan），新增操作/能量规则 **1174/1174 通过**（含 UBSan）。
+- 标准 C++17 战斗规则 **222/222 通过**、镜头/效果规则 **320/320 通过**，两套 UBSan 检查也通过；另有 AI 决策与技能体积规则 **784/784 通过**（含 UBSan），新增操作/能量规则 **1174/1174 通过**（含 UBSan）。
 - 这些规则被服务端战斗、救援、技能、人数缩放和 Boss 命中实际调用。
 - `.github/workflows/portable-checks.yml` 已配置同类 CI；本轮未查询 GitHub 托管运行结果。
 
@@ -139,9 +153,9 @@ Windows 引擎环境执行 UE 自动化与打包：
 .\Scripts\Build-Windows.ps1 -EngineRoot 'C:\Program Files\Epic Games\UE_5.6' -Action Package
 ```
 
-目前有 **37 项 UE Automation 测试源码**，覆盖战斗、连招、空中取消、方向/奔跑、救援、能量、Boss、AI 同伴和队伍生命周期。脚本从源码提取完整测试名，要求本次报告中逐项成功，拒绝零测试、漏项、失败或未完成。报告位于 `Artifacts/Tests/`，Development 包位于 `Artifacts/Windows/`。
+目前有 **38 项 UE Automation 测试源码**，覆盖战斗、连招、空中取消、方向/奔跑、救援、能量、Boss、AI 同伴和队伍生命周期。脚本从源码提取完整测试名，要求本次报告中逐项成功，拒绝零测试、漏项、失败或未完成。报告位于 `Artifacts/Tests/`，Development 包位于 `Artifacts/Windows/`。
 
-**Unreal 编译、这 37 项 UE 测试、PowerShell、渲染、打包和三台 Windows 设备联机均未执行。**当前 Linux 云机器没有 Unreal Editor/UnrealBuildTool，测试结果不能替代这些门槛。
+**Unreal 编译、这 38 项 UE 测试、PowerShell、渲染、打包和三台 Windows 设备联机均未执行。**当前 Linux 云机器没有 Unreal Editor/UnrealBuildTool，测试结果不能替代这些门槛。
 
 ## 已知范围
 
@@ -156,7 +170,7 @@ Windows 引擎环境执行 UE 自动化与打包：
 - [验收步骤](Docs/ACCEPTANCE.md)
 - [验证证据与阻塞](Docs/VALIDATION.md)
 
-本轮新增剧情规则499项普通与UBSan通过，五套总2977项；37项UE测试仅源码、未执行。中文字体、小窗口布局、三章迁移及真实联机仍需UE验收。
+本轮剧情规则510项、布局5440项普通与UBSan通过，六套总8450项；38项UE测试仅源码、未执行。中文字体、小窗口布局、三章迁移及真实联机仍需UE验收。
 
 按路线自动推进独立开发工作；Windows 编译和真实局域网是下一道外部验收门槛。各云任务使用现有隔离目录，无需额外创建 Git worktree。
 

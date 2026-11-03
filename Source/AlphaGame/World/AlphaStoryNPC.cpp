@@ -133,6 +133,11 @@ void AAlphaStoryNPC::BuildAppearance()
     UMaterialInstanceDynamic* Dark = AlphaArt::Material(this, FLinearColor(.1f, .13f, .18f), .05f, .8f, 0.f, 1.f);
     UMaterialInstanceDynamic* Paper = AlphaArt::Material(this, FLinearColor(.86f, .78f, .57f), 0.f, .9f, 0.f, 1.f);
     UMaterialInstanceDynamic* Signal = AlphaArt::EffectMaterial(this, FLinearColor(.35f, 1.f, .72f), .2f);
+    if (Coat)
+    {
+        Coat->SetScalarParameterValue(TEXT("SurfaceStyle"), 3.f);
+        Coat->SetScalarParameterValue(TEXT("TextureStrength"), .15f);
+    }
 
     AddPart(EAlphaPrimitive::Cube, FVector(0, -10, 43), FVector(15, 15, 70), Dark);
     AddPart(EAlphaPrimitive::Cube, FVector(0, 10, 43), FVector(15, 15, 70), Dark);

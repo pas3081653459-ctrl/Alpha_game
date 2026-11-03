@@ -50,6 +50,10 @@ public:
     /** Invalidates conversations across retries of the same chapter. */
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Story")
     int32 StoryRevision = 0;
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Route")
+    bool bAwaitingRouteAdvance = false;
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Route")
+    FVector RouteObjective = FVector::ZeroVector;
     static FVector GetChapterOrigin(int32 Chapter);
     int32 GetChapterWaveCount() const;
     bool ChapterHasBoss() const;

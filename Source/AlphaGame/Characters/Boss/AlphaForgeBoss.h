@@ -89,4 +89,7 @@ private:
 
     int32 AttackSequence = 0;
     bool bConfigured = false;
+    float RouteRefreshCountdown = 0.f;
+    FVector RouteWaypoint = FVector::ZeroVector;
+    TWeakObjectPtr<AAlphaCharacter> RoutedTarget;
 };

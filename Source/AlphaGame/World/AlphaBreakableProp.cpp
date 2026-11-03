@@ -47,7 +47,7 @@ void AAlphaBreakableProp::BeginPlay()
         {
             Parts[Index]->SetMaterial(0, AlphaArt::Material(this,
                 Index < 5 ? FLinearColor(.48f, .19f, .065f) : FLinearColor(.09f, .16f, .23f),
-                Index < 5 ? 0.f : .5f, .85f));
+                Index < 5 ? 0.f : .5f, .85f, 0.f, .35f, 0, Index < 5 ? .55f : 0.f));
         }
     }
     PresentState(false); // Loading an already broken prop does not replay an old explosion.

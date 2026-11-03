@@ -4,7 +4,10 @@
 #include "Combat/AlphaCombatComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "EngineUtils.h"
+#include "Engine/World.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Rules/LevelLayoutRules.h"
+#include "World/AlphaGameState.h"
 
 AAlphaEnemy::AAlphaEnemy()
 {
@@ -27,11 +30,16 @@ void AAlphaEnemy::BeginPlay()
 void AAlphaEnemy::FindTarget()
 {
     Target.Reset();
+    const AAlphaGameState* State = GetWorld()->GetGameState<AAlphaGameState>();
+    const int32 Chapter = State ? State->ChapterIndex : 0;
+    const FVector ChapterOrigin = AAlphaGameState::GetChapterOrigin(Chapter);
     float NearestDistanceSquared = TNumericLimits<float>::Max();
     for (TActorIterator<AAlphaCharacter> It(GetWorld()); It; ++It)
     {
         AAlphaCharacter* Candidate = *It;
         if (!Candidate->IsCoopParticipant() || Candidate->IsDefeated() || !Candidate->GetCombatComponent()->IsAlive()) continue;
+        const FVector Local = Candidate->GetActorLocation() - ChapterOrigin;
+        if (!AlphaLayoutRules::IsWalkable(Chapter, {Local.X, Local.Y})) continue;
         const float DistanceSquared = FVector::DistSquared(GetActorLocation(), Candidate->GetActorLocation());
         if (DistanceSquared < NearestDistanceSquared)
         {
@@ -54,11 +62,17 @@ void AAlphaEnemy::Tick(float DeltaSeconds)
     }
     if (!Target.IsValid()) return;
 
+    const AAlphaGameState* State = GetWorld()->GetGameState<AAlphaGameState>();
+    const int32 Chapter = State ? State->ChapterIndex : 0;
+    const FVector ChapterOrigin = AAlphaGameState::GetChapterOrigin(Chapter);
+    const FVector LocalFrom = GetActorLocation() - ChapterOrigin;
+    const FVector LocalTo = Target->GetActorLocation() - ChapterOrigin;
     const FVector Delta = Target->GetActorLocation() - GetActorLocation();
     FaceMoveIntent(Delta);
     const bool bInReach = FMath::Abs(FVector::DotProduct(Delta, GetActorForwardVector())) <= AttackDistance
         && FMath::Abs(FVector::DotProduct(Delta, GetActorRightVector())) <= AttackDepthTolerance
-        && FMath::Abs(Delta.Z) <= 100.0f;
+        && FMath::Abs(Delta.Z) <= 100.0f
+        && AlphaLayoutRules::SegmentClear(Chapter, {LocalFrom.X, LocalFrom.Y}, {LocalTo.X, LocalTo.Y}, 0.);
     if (bInReach)
     {
         GetCharacterMovement()->StopMovementImmediately();
@@ -66,7 +80,22 @@ void AAlphaEnemy::Tick(float DeltaSeconds)
     }
     else
     {
-        AddMovementInput(FVector(Delta.X, Delta.Y, 0.0f).GetSafeNormal());
+        RouteRefreshCountdown -= DeltaSeconds;
+        if (RouteRefreshCountdown <= 0.f || RoutedTarget != Target)
+        {
+            RouteRefreshCountdown = .15f;
+            RoutedTarget = Target;
+            const AlphaLayoutRules::Point Waypoint = AlphaLayoutRules::NextWaypoint(Chapter,
+                {LocalFrom.X, LocalFrom.Y}, {LocalTo.X, LocalTo.Y});
+            RouteWaypoint = ChapterOrigin + FVector(Waypoint.X, Waypoint.Y, 0.);
+        }
+        const FVector RouteDelta = RouteWaypoint - GetActorLocation();
+        if (RouteDelta.SizeSquared2D() > .25)
+        {
+            const FVector RouteDirection = RouteDelta.GetSafeNormal2D();
+            FaceMoveIntent(RouteDirection);
+            AddMovementInput(RouteDirection);
+        }
     }
 }
 

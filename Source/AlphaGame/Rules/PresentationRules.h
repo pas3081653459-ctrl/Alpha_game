@@ -22,6 +22,19 @@ inline double BlendWeight(double DeltaSeconds, double Speed)
     if (!std::isfinite(DeltaSeconds) || !std::isfinite(Speed) || DeltaSeconds <= 0.0 || Speed <= 0.0) return 0.0;
     return 1.0 - std::exp(-std::min(DeltaSeconds, 1.0) * Speed);
 }
+inline double RouteCameraDistance(double HalfWidth, double HalfDepth, double HeightSpan, double AspectRatio)
+{
+    if (!std::isfinite(HalfWidth) || !std::isfinite(HalfDepth) || !std::isfinite(HeightSpan)
+        || !std::isfinite(AspectRatio)) return 2800.;
+    const double Width = std::clamp(HalfWidth, 0., 5000.);
+    const double Depth = std::clamp(HalfDepth, 0., 2000.);
+    const double Height = std::clamp(HeightSpan, 0., 2000.);
+    const double Aspect = std::clamp(AspectRatio, .5, 4.);
+    const double VerticalSpan = Depth * .726 + std::max(800., Height + 550.);
+    const double FramedWidth = std::max(Width * 2. + 650., VerticalSpan * Aspect);
+    constexpr double TanHalfFOV = .5205670505517462;
+    return std::clamp(std::max(CameraDistance(Width * 2., Aspect), FramedWidth / (2. * TanHalfFOV)), 2300., 5200.);
+}
 
 inline double EffectEnvelope(double Age, double Lifetime)
 {

@@ -85,9 +85,9 @@ AAlphaForgeEnvironment::AAlphaForgeEnvironment()
         Light->SetAttenuationRadius(Radius);
         Light->SetCastShadows(false);
     };
-    AddLamp(TEXT("FurnaceGlow"), FVector(0, 660, 420), FLinearColor(1.f, .25f, .045f), 2200.f, 850.f);
+    AddLamp(TEXT("FurnaceGlow"), FVector(1750, 830, 460), FLinearColor(1.f, .25f, .045f), 2200.f, 850.f);
     AddLamp(TEXT("LeftLantern"), FVector(-1120, 280, 300), FLinearColor(1.f, .48f, .1f), 600.f, 460.f);
-    AddLamp(TEXT("RightLantern"), FVector(1120, 280, 300), FLinearColor(1.f, .48f, .1f), 600.f, 460.f);
+    AddLamp(TEXT("RightLantern"), FVector(1840, 340, 300), FLinearColor(1.f, .48f, .1f), 600.f, 460.f);
 }
 
 void AAlphaForgeEnvironment::BeginPlay()
@@ -101,7 +101,7 @@ void AAlphaForgeEnvironment::BeginPlay()
 }
 
 UInstancedStaticMeshComponent* AAlphaForgeEnvironment::MakeBatch(EAlphaPrimitive Shape, const FLinearColor& Tint,
-    float Metallic, float Roughness, float Glow)
+    float Metallic, float Roughness, float Glow, int32 SurfaceStyle, float TextureStrength)
 {
     UInstancedStaticMeshComponent* Batch = NewObject<UInstancedStaticMeshComponent>(this);
     AddInstanceComponent(Batch);
@@ -110,7 +110,7 @@ UInstancedStaticMeshComponent* AAlphaForgeEnvironment::MakeBatch(EAlphaPrimitive
     Batch->SetStaticMesh(AlphaArt::Mesh(Shape));
     // Empty Entry has no guaranteed sky/reflection environment. Highly metallic
     // scenery becomes nearly black without IBL; keep a diffuse color foundation.
-    Batch->SetMaterial(0, AlphaArt::Material(this, Tint, FMath::Min(Metallic, .35f), Roughness, Glow));
+    Batch->SetMaterial(0, AlphaArt::Material(this, Tint, FMath::Min(Metallic, .35f), Roughness, Glow, .45f, SurfaceStyle, TextureStrength));
     Batch->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     Batch->SetGenerateOverlapEvents(false);
     Batch->SetCanEverAffectNavigation(false);
@@ -158,141 +158,115 @@ void AAlphaForgeEnvironment::Ring(UInstancedStaticMeshComponent* Batch, const FV
 
 void AAlphaForgeEnvironment::BuildWorkshop()
 {
-    // 13 mesh/material batches, 416 instances, fixed seed, no Tick or gameplay collision.
-    UInstancedStaticMeshComponent* Iron = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.12f, .17f, .22f), .35f, .65f);
-    UInstancedStaticMeshComponent* DarkFloor = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.24f, .29f, .32f), .15f, .8f);
-    UInstancedStaticMeshComponent* LightFloor = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.34f, .39f, .41f), .1f, .8f);
-    UInstancedStaticMeshComponent* Ceramic = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.055f, .27f, .27f), .12f, .3f);
-    UInstancedStaticMeshComponent* Brass = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.5f, .29f, .09f), .8f, .35f);
-    UInstancedStaticMeshComponent* Amber = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(1.f, .23f, .025f), .05f, .6f, 3.f);
-    UInstancedStaticMeshComponent* Cyan = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.08f, .45f, .48f), .05f, .5f, .7f);
-    UInstancedStaticMeshComponent* IronPipe = MakeBatch(EAlphaPrimitive::Cylinder, FLinearColor(.14f, .19f, .23f), .35f, .6f);
-    UInstancedStaticMeshComponent* BrassPipe = MakeBatch(EAlphaPrimitive::Cylinder, FLinearColor(.45f, .25f, .065f), .8f, .35f);
-    UInstancedStaticMeshComponent* Hearth = MakeBatch(EAlphaPrimitive::Cylinder, FLinearColor(.55f, .045f, .008f), .1f, .8f, 2.f);
-    UInstancedStaticMeshComponent* Ember = MakeBatch(EAlphaPrimitive::Sphere, FLinearColor(1.f, .3f, .04f), 0.f, .7f, 3.f);
-    UInstancedStaticMeshComponent* Roof = MakeBatch(EAlphaPrimitive::Cone, FLinearColor(.035f, .14f, .145f), .3f, .7f);
-    UInstancedStaticMeshComponent* DistantIron = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.14f, .2f, .25f), .15f, .9f);
-    Amber->SetCastShadow(false);
-    Cyan->SetCastShadow(false);
-    Hearth->SetCastShadow(false);
-    Ember->SetCastShadow(false);
-    FRandomStream Random(308165);
+    // RouteGeometry supplies the actual non-rectangular floor and low outline.
+    // This actor only supplies landmarks, sky/light and collision-free dressing.
+    UInstancedStaticMeshComponent* Iron = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.25f, .33f, .41f), .25f, .65f);
+    UInstancedStaticMeshComponent* Ceramic = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.7f, .96f, .95f), .08f, .6f, 0, 2, .7f);
+    UInstancedStaticMeshComponent* Brass = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.84f, .58f, .25f), .3f, .5f);
+    UInstancedStaticMeshComponent* Paper = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.97f, .93f, .8f), .02f, .85f, 0, 1, .5f);
+    UInstancedStaticMeshComponent* Banner = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(1.f, .74f, .68f), .02f, .85f, 0, 3, .7f);
+    UInstancedStaticMeshComponent* Amber = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(1.f, .43f, .12f), .02f, .6f, 1.1f);
+    UInstancedStaticMeshComponent* Cyan = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.2f, .83f, .9f), .02f, .65f, .35f);
+    UInstancedStaticMeshComponent* IronPipe = MakeBatch(EAlphaPrimitive::Cylinder, FLinearColor(.24f, .32f, .4f), .3f, .6f);
+    UInstancedStaticMeshComponent* BrassPipe = MakeBatch(EAlphaPrimitive::Cylinder, FLinearColor(.78f, .49f, .19f), .3f, .6f);
+    UInstancedStaticMeshComponent* Hearth = MakeBatch(EAlphaPrimitive::Cylinder, FLinearColor(.84f, .13f, .025f), .04f, .8f, 1.f);
+    UInstancedStaticMeshComponent* Ember = MakeBatch(EAlphaPrimitive::Sphere, FLinearColor(1.f, .5f, .12f), 0, .8f, 1.4f);
+    UInstancedStaticMeshComponent* DistantIron = MakeBatch(EAlphaPrimitive::Cube, FLinearColor(.3f, .4f, .47f), .1f, .9f);
+    for (UInstancedStaticMeshComponent* Batch : {Amber, Cyan, Hearth, Ember}) Batch->SetCastShadow(false);
+    const auto Block = [](UInstancedStaticMeshComponent* Batch, const FVector& Position,
+        const FVector& Dimensions, const FRotator& Rotation = FRotator::ZeroRotator)
+    {
+        Add(Batch, Position, Dimensions / 100.f, Rotation);
+    };
 
-    // Readable, moderately bright combat floor; visual surface tops at Z=1.
-    Add(Iron, FVector(0, 0, -18), FVector(28.2f, 8.2f, .35f));
-    for (int32 X = 0; X < 14; ++X)
+    // Entry: a small records desk and one banner distinguish the NPC briefing
+    // area from both battle rooms. No full-width wall hides the guide.
+    Block(Iron, FVector(-1080, 460, 70), FVector(280, 110, 140));
+    Block(Brass, FVector(-1080, 460, 145), FVector(300, 125, 12));
+    for (int32 Book = 0; Book < 3; ++Book)
+        Block(Paper, FVector(-1160 + Book * 75.f, 440, 162 + Book % 2 * 7.f), FVector(58, 65, 15));
+    Block(Iron, FVector(-1240, 510, 210), FVector(25, 25, 420));
+    Block(Banner, FVector(-1190, 510, 310), FVector(110, 10, 165));
+    Block(Amber, FVector(-960, 455, 215), FVector(30, 30, 65));
+
+    // Landmark A: one massive forge hammer above the first wide hall. The
+    // machinery is entirely behind Y=580 and never inside the playable floor.
+    for (float X : {-350.f, 350.f})
     {
-        for (int32 Y = 0; Y < 4; ++Y)
-        {
-            Add((X + Y) % 3 == 0 ? LightFloor : DarkFloor,
-                FVector(-1300 + X * 200, -300 + Y * 200, -2), FVector(1.97f, 1.97f, .06f));
-        }
+        Block(Iron, FVector(X, 770, 370), FVector(75, 100, 740));
+        Block(Ceramic, FVector(X, 710, 280), FVector(90, 24, 420));
+        Block(Brass, FVector(X, 690, 80), FVector(115, 28, 20));
     }
-    for (int32 X = -13; X <= 13; ++X)
+    Bar(Iron, FVector(-420, 770, 760), FVector(420, 770, 760), 110, 85);
+    Pipe(BrassPipe, FVector(0, 760, 740), FVector(0, 760, 470), 26);
+    Block(Iron, FVector(0, 750, 420), FVector(280, 180, 130));
+    Block(Brass, FVector(0, 650, 420), FVector(240, 20, 65));
+    Block(Hearth, FVector(0, 770, 175), FVector(250, 170, 260));
+    Block(Amber, FVector(0, 675, 190), FVector(135, 12, 60));
+    Block(Ceramic, FVector(-450, 850, 125), FVector(250, 170, 250));
+    Pipe(IronPipe, FVector(-460, 920, 250), FVector(-460, 920, 600), 40);
+
+    // The connecting loading corridor is visibly offset toward the camera.
+    // Its pipes and warning stripes sit just OUTSIDE its rear Y=120 edge.
+    Pipe(IronPipe, FVector(650, 230, 60), FVector(1110, 230, 60), 26);
+    Pipe(BrassPipe, FVector(650, 235, 125), FVector(1110, 235, 125), 9);
+    for (float X : {680.f, 1070.f})
     {
-        for (int32 Side : {-1, 1})
-        {
-            Add(Brass, FVector(X * 100, Side * 360, 2), FVector(.52f, .025f, .025f));
-        }
+        Block(Iron, FVector(X, 245, 45), FVector(55, 70, 90));
+        Block(Amber, FVector(X, 205, 80), FVector(28, 8, 20));
     }
-    for (int32 Side : {-1, 1})
+    // Individual floor chevrons guide the bend; they do not fill the gap.
+    for (float X : {700.f, 1050.f})
     {
-        Add(Iron, FVector(0, Side * 425, -8), FVector(28.5f, .5f, .3f));
-        Add(Brass, FVector(0, Side * 405, 1), FVector(28.f, .025f, .035f));
-    }
-    // Low foreground framing stays below players' feet; tall details at corners.
-    for (int32 Side : {-1, 1})
-    {
-        Add(Iron, FVector(Side * 1380, -470, 15), FVector(.4f, .7f, .5f));
-        Add(Brass, FVector(Side * 1380, -470, 42), FVector(.5f, .78f, .06f));
+        Bar(Brass, FVector(X - 25, -110, 4), FVector(X + 15, -80, 4), 4, 3);
+        Bar(Brass, FVector(X + 15, -80, 4), FVector(X - 25, -50, 4), 4, 3);
     }
 
-    // Layer 1: huge recessed furnace, segmented brass rings and protective cage.
-    const FVector Core(0, 910, 480);
+    // Landmark B: the furnace belongs to the distinct second encounter/Boss
+    // room at X=1750, rather than duplicating the first-room backdrop.
+    const FVector Core(1750, 1000, 500);
     Add(IronPipe, Core + FVector(0, 70, 0), FVector(6.5f, 6.5f, 1.6f), FRotator(0, 0, 90));
     Add(Hearth, Core, FVector(5.3f, 5.3f, .16f), FRotator(0, 0, 90));
     Add(Ember, Core + FVector(0, -20, 0), FVector(3.4f, .45f, 3.4f));
-    Ring(Brass, Core + FVector(0, -42, 0), 295.f, 32, 20.f, 25.f);
-    Ring(Iron, Core + FVector(0, -65, 0), 228.f, 24, 12.f, 18.f);
-    Ring(Amber, Core + FVector(0, -70, 0), 205.f, 24, 5.f, 7.f);
+    Ring(Brass, Core + FVector(0, -42, 0), 295.f, 30, 20.f, 25.f);
+    Ring(Iron, Core + FVector(0, -65, 0), 228.f, 22, 12.f, 18.f);
+    Ring(Amber, Core + FVector(0, -70, 0), 205.f, 22, 5.f, 7.f);
     for (int32 Index = -2; Index <= 2; ++Index)
     {
         const float X = Index * 72.f;
-        const float HalfHeight = FMath::Sqrt(FMath::Max(0.f, 220.f * 220.f - X * X));
-        Bar(Iron, Core + FVector(X, -86, -HalfHeight), Core + FVector(X, -86, HalfHeight), 16.f, 14.f);
+        const float Height = FMath::Sqrt(FMath::Max(0.f, 220.f * 220.f - X * X));
+        Bar(Iron, Core + FVector(X, -86, -Height), Core + FVector(X, -86, Height), 16, 14);
     }
-    for (int32 Index = 0; Index < 12; ++Index)
+    Block(Iron, FVector(1750, 980, 100), FVector(800, 250, 160));
+    Block(Ceramic, FVector(1750, 835, 120), FVector(560, 28, 85));
+    for (float X : {1260.f, 2240.f})
     {
-        const float Angle = Index * 30.f;
-        const FVector Position = Core + FVector(FMath::Cos(FMath::DegreesToRadians(Angle)) * 326.f, -35, FMath::Sin(FMath::DegreesToRadians(Angle)) * 326.f);
-        Add(Brass, Position, FVector(.32f, .35f, .24f), FRotator(-Angle, 0, 0));
+        Block(Iron, FVector(X, 840, 425), FVector(75, 95, 850));
+        Block(Ceramic, FVector(X, 780, 330), FVector(90, 25, 480));
+        Block(Brass, FVector(X, 760, 570), FVector(110, 30, 20));
+        Pipe(BrassPipe, FVector(X + 55, 900, 180), FVector(X + 55, 900, 800), 15);
     }
-    Add(Iron, FVector(0, 900, 115), FVector(8, 3, 1.5f));
-    Add(Ceramic, FVector(0, 725, 105), FVector(5.6f, .25f, .7f));
-    for (int32 Index = -3; Index <= 3; ++Index)
-    {
-        Add(Amber, FVector(Index * 70, 704, 108), FVector(.28f, .06f, .1f));
-    }
+    Bar(Iron, FVector(1180, 870, 900), FVector(2320, 870, 900), 100, 70);
+    Pipe(IronPipe, FVector(1410, 1100, 450), FVector(1230, 1100, 450), 40);
+    Pipe(IronPipe, FVector(1230, 1100, 450), FVector(1230, 1100, 1100), 40);
 
-    // Layer 2: structural bays, ceramic cladding, conduits and hanging lanterns.
-    for (int32 Side : {-1, 1})
+    // A thin brass octagon decorates the boss floor without adding a second
+    // floor mesh or implying a larger walkable footprint.
+    for (int32 Segment = 0; Segment < 8; ++Segment)
     {
-        for (int32 Bay = 0; Bay < 3; ++Bay)
-        {
-            const float X = Side * (600.f + Bay * 360.f);
-            Add(Iron, FVector(X, 700, 440), FVector(.65f, .8f, 8.8f));
-            Add(Ceramic, FVector(X, 645, 335), FVector(.8f, .25f, 4.1f));
-            Add(Brass, FVector(X, 625, 125), FVector(.95f, .35f, .14f));
-            Add(Brass, FVector(X, 625, 550), FVector(.95f, .35f, .14f));
-            Add(Iron, FVector(X, 700, 900), FVector(1.1f, 1.15f, .3f));
-            Bar(Iron, FVector(X - 180, 700, 920), FVector(X + 180, 700, 920), 65, 55);
-            Pipe(BrassPipe, FVector(X + Side * 65, 760, 140), FVector(X + Side * 65, 760, 800), 16);
-            for (int32 Clamp = 0; Clamp < 3; ++Clamp)
-            {
-                Add(Iron, FVector(X + Side * 65, 760, 230 + Clamp * 230), FVector(.65f, .5f, .12f));
-            }
-        }
-        Bar(Iron, FVector(Side * 480, 880, 840), FVector(Side * 1400, 880, 840), 100, 70);
-        Pipe(IronPipe, FVector(Side * 380, 1000, 430), FVector(Side * 560, 1000, 430), 45);
-        Pipe(IronPipe, FVector(Side * 560, 1000, 430), FVector(Side * 560, 1000, 1080), 45);
-        Pipe(BrassPipe, FVector(Side * 350, 1150, 1030), FVector(Side * 1420, 1150, 1030), 22);
+        const float A = Segment * PI / 4.f;
+        const float B = (Segment + 1) * PI / 4.f;
+        Bar(Brass, FVector(1800 + FMath::Cos(A) * 440, FMath::Sin(A) * 440, 3),
+            FVector(1800 + FMath::Cos(B) * 440, FMath::Sin(B) * 440, 3), 5, 2);
+    }
+    Block(Paper, FVector(2470, 330, 85), FVector(105, 80, 155));
+    Pipe(BrassPipe, FVector(2440, 410, 110), FVector(2440, 820, 110), 18);
+    Block(Cyan, FVector(2440, 810, 110), FVector(65, 20, 45));
 
-        const FVector Lantern(Side * 1120, 480, 335);
-        Pipe(BrassPipe, Lantern + FVector(0, 0, 80), Lantern + FVector(0, 0, 360), 4);
-        Add(Ember, Lantern, FVector(.75f, .75f, 1.1f));
-        Add(IronPipe, Lantern + FVector(0, 0, 60), FVector(.9f, .9f, .12f));
-        Add(IronPipe, Lantern - FVector(0, 0, 60), FVector(.9f, .9f, .12f));
-        for (int32 Strip = 0; Strip < 4; ++Strip)
-        {
-            const float Angle = Strip * PI * .5f;
-            const FVector Offset(FMath::Cos(Angle) * 35, FMath::Sin(Angle) * 35, 0);
-            Pipe(BrassPipe, Lantern + Offset - FVector(0, 0, 55), Lantern + Offset + FVector(0, 0, 55), 3);
-        }
-    }
-
-    // Layer 3: distant towers and cog silhouettes, deliberately lower contrast.
-    Add(DistantIron, FVector(0, 1800, 580), FVector(45, .5f, 13));
-    for (int32 Index = -4; Index <= 4; ++Index)
-    {
-        const float X = Index * 430.f;
-        const float Height = Random.FRandRange(700.f, 1200.f);
-        Add(DistantIron, FVector(X, 1550, Height * .5f), FVector(2.3f, 2.3f, Height / 100.f));
-        Add(Roof, FVector(X, 1550, Height + 100), FVector(3.8f, 3.8f, 2.f));
-        for (int32 Window = 0; Window < 3; ++Window)
-        {
-            Add(Cyan, FVector(X + (Window - 1) * 55, 1428, Height - 100), FVector(.12f, .04f, .4f));
-        }
-    }
-    for (int32 Side : {-1, 1})
-    {
-        const FVector GearCenter(Side * 1030, 1240, 660);
-        Ring(Iron, GearCenter, 155, 16, 26, 22);
-        for (int32 Tooth = 0; Tooth < 12; ++Tooth)
-        {
-            const float Angle = Tooth * 30.f;
-            const FVector Radial(FMath::Cos(FMath::DegreesToRadians(Angle)), 0, FMath::Sin(FMath::DegreesToRadians(Angle)));
-            Bar(Iron, GearCenter + Radial * 135, GearCenter + Radial * 187, 25, 32);
-        }
-        Pipe(BrassPipe, GearCenter + FVector(0, -20, 0), GearCenter + FVector(0, 25, 0), 35);
-    }
+    // Two varied, lower-contrast distant silhouettes replace the repeated
+    // tower/roof wall. Empty sky separates the hammer and furnace landmarks.
+    Block(DistantIron, FVector(-450, 1480, 400), FVector(220, 210, 800));
+    Block(DistantIron, FVector(2260, 1570, 570), FVector(280, 240, 1140));
+    for (int32 Window = 0; Window < 3; ++Window)
+        Block(Cyan, FVector(2260 + (Window - 1) * 60, 1445, 920), FVector(14, 7, 45));
 }

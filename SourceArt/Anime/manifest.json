@@ -1,0 +1,20 @@
+{
+  "source": "T_AnimeSurfaceAtlas.png",
+  "sha256": "3154d0db4544f63fdcb2085d1b5be3aed8fdd9bcb37b8275e643c58ed4280ed4",
+  "width": 1254,
+  "height": 1254,
+  "origin": "Original image generated with image_gen for AlphaGame; not a rendered game screenshot.",
+  "color_space": "sRGB",
+  "layout": {
+    "columns": 2,
+    "rows": 2,
+    "styles": {
+      "0": "top-left warm wood deck",
+      "1": "top-right ivory limestone",
+      "2": "bottom-left celadon ceramic",
+      "3": "bottom-right crimson cloth"
+    }
+  },
+  "usage": "Import unchanged; material uses quadrant UV selection with inset margins. Skin and energy effects do not use this atlas.",
+  "limits": "Generated painted atlas; not claimed to be perfectly seamless. No game shader/render verification in cloud."
+}

@@ -28,4 +28,7 @@ private:
     void FindTarget();
     TWeakObjectPtr<AAlphaCharacter> Target;
     float RetargetCountdown = 0.0f;
+    float RouteRefreshCountdown = 0.0f;
+    FVector RouteWaypoint = FVector::ZeroVector;
+    TWeakObjectPtr<AAlphaCharacter> RoutedTarget;
 };

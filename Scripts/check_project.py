@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Repository consistency checks only; this does not compile or run Unreal."""
 import json
+import hashlib
 from pathlib import Path
 import re
+import struct
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -38,6 +40,15 @@ def main():
         'Source/AlphaGame/Tests/AlphaStoryNPCTests.cpp',
         'Scripts/run_story_tests.py',
         'Scripts/test_story_rules.cpp',
+        'Source/AlphaGame/Rules/LevelLayoutRules.h',
+        'Source/AlphaGame/World/AlphaRouteGeometry.h',
+        'Source/AlphaGame/Tests/AlphaLevelLayoutTests.cpp',
+        'Scripts/run_level_layout_tests.py',
+        'Scripts/test_level_layout.cpp',
+        'Scripts/Build-Mac.sh',
+        'Content/Python/init_unreal.py',
+        'SourceArt/Anime/T_AnimeSurfaceAtlas.png',
+        'SourceArt/Anime/manifest.json',
         'Source/AlphaGame/World/AlphaBreakableProp.h',
         'Source/AlphaGame/Tests/AlphaEnvironmentTests.cpp',
         'Source/AlphaGame/World/AlphaPlayerController.h',
@@ -64,6 +75,13 @@ def main():
     ]
     for path in required:
         assert (ROOT / path).is_file(), f'Missing: {path}'
+    art_source = ROOT / 'SourceArt/Anime/T_AnimeSurfaceAtlas.png'
+    art_bytes = art_source.read_bytes()
+    art_manifest = json.loads((art_source.parent / 'manifest.json').read_text(encoding='utf-8'))
+    assert art_bytes[:8] == b'\x89PNG\r\n\x1a\n', 'Invalid anime atlas PNG signature'
+    assert hashlib.sha256(art_bytes).hexdigest() == art_manifest['sha256'], 'Anime atlas source differs from provenance manifest'
+    assert struct.unpack('>II', art_bytes[16:24]) == (art_manifest['width'], art_manifest['height']), 'Anime atlas dimensions mismatch'
+    assert art_manifest['width'] == art_manifest['height'] and art_manifest['width'] % 2 == 0, 'Atlas requires an even square 2x2 layout'
     config = (ROOT / 'Config/DefaultEngine.ini').read_text(encoding='utf-8')
     assert 'GameInstanceClass=/Script/AlphaGame.AlphaGameInstance' in config
     assert 'GlobalDefaultGameMode=/Script/AlphaGame.AlphaGameMode' in config

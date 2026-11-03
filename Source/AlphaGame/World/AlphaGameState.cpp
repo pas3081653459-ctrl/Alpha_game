@@ -2,6 +2,8 @@
 #include "World/AlphaBreakableProp.h"
 #include "World/AlphaStoryNPC.h"
 #include "Rules/StoryRules.h"
+#include "Rules/LevelLayoutRules.h"
+#include "World/AlphaRouteGeometry.h"
 #include "Visuals/AlphaChapterEnvironment.h"
 #include "Characters/Boss/AlphaForgeBoss.h"
 #include "Visuals/AlphaArtLibrary.h"
@@ -26,6 +28,8 @@ void AAlphaGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
     DOREPLIFETIME(AAlphaGameState, ChapterIndex);
     DOREPLIFETIME(AAlphaGameState, StoryStage);
     DOREPLIFETIME(AAlphaGameState, StoryRevision);
+    DOREPLIFETIME(AAlphaGameState, bAwaitingRouteAdvance);
+    DOREPLIFETIME(AAlphaGameState, RouteObjective);
     DOREPLIFETIME(AAlphaGameState, Wave);
     DOREPLIFETIME(AAlphaGameState, RemainingEnemies);
     DOREPLIFETIME(AAlphaGameState, RoundState);
@@ -40,40 +44,25 @@ void AAlphaGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 
 void AAlphaGameState::BuildPrototypeArena()
 {
-    UStaticMesh* Cube = AlphaArt::Mesh(EAlphaPrimitive::Cube);
-    if (!Cube) return;
-    const auto AddCollisionBlock = [this, Cube](const FVector& Location, const FVector& Scale)
-    {
-        AStaticMeshActor* Block = GetWorld()->SpawnActor<AStaticMeshActor>(Location, FRotator::ZeroRotator);
-        if (!Block) return;
-        Block->SetReplicates(false);
-        UStaticMeshComponent* Mesh = Block->GetStaticMeshComponent();
-        Mesh->SetMobility(EComponentMobility::Movable);
-        Mesh->SetStaticMesh(Cube);
-        Mesh->SetWorldScale3D(Scale);
-        Mesh->SetCollisionProfileName(TEXT("BlockAll"));
-        // These five deterministic collision volumes exist even on dedicated
-        // servers. Rendering is a separate, entirely non-colliding local actor.
-        Block->SetActorHiddenInGame(true);
-        Mesh->SetCastShadow(false);
-    };
     for (int32 Chapter = 0; Chapter < AlphaStoryRules::ChapterCount; ++Chapter)
     {
         const FVector Origin = GetChapterOrigin(Chapter);
-        AddCollisionBlock(Origin + FVector(0, 0, -50), FVector(28, 8, 1));
-        AddCollisionBlock(Origin + FVector(0, -450, 500), FVector(30, 1, 12));
-        AddCollisionBlock(Origin + FVector(0, 450, 500), FVector(30, 1, 12));
-        AddCollisionBlock(Origin + FVector(-1450, 0, 500), FVector(1, 10, 12));
-        AddCollisionBlock(Origin + FVector(1450, 0, 500), FVector(1, 10, 12));
+        const FTransform RouteTransform(FRotator::ZeroRotator,Origin);
+        if (AAlphaRouteGeometry* Route=GetWorld()->SpawnActorDeferred<AAlphaRouteGeometry>(AAlphaRouteGeometry::StaticClass(),RouteTransform))
+        {
+            Route->ChapterIndex=Chapter;
+            Route->FinishSpawning(RouteTransform);
+        }
         if (HasAuthority())
         {
             for (int32 Side : {-1, 1})
             {
                 for (int32 Index = 0; Index < 4; ++Index)
                 {
+                    const AlphaLayoutRules::Point Position=AlphaLayoutRules::Project(Chapter,
+                        {Side * (420. + Index * 250.), Index % 2 == 0 ? 260. : -260.},70.);
                     GetWorld()->SpawnActor<AAlphaBreakableProp>(
-                        Origin + FVector(Side * (420.f + Index * 250.f), Index % 2 == 0 ? 260.f : -260.f, 34.f),
-                        FRotator::ZeroRotator);
+                        Origin + FVector(Position.X,Position.Y,34.+AlphaLayoutRules::SurfaceHeight(Chapter,Position)),FRotator::ZeroRotator);
                 }
             }
         }

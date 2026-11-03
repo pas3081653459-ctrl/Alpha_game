@@ -37,6 +37,8 @@ private:
     static void DestroyCompanion(AAlphaCompanion* Companion);
     bool bCompanionFillEnabled = true;
     void StartNextWave();
+    void QueueRouteEncounter(bool bBoss);
+    bool IsPartyAtRouteObjective() const;
     void MarkChapterVictory();
     void CheckRound();
     void EnsureRoundMonitor();
@@ -44,6 +46,7 @@ private:
     void ClearEncounterActors();
     void MarkDefeat();
     int32 RunPlayerCount = 1;
+    double RouteReadyAt = 0.;
     FTimerHandle WaveTimer;
     FTimerHandle MonitorTimer;
     TArray<TWeakObjectPtr<AAlphaEnemy>> WaveEnemies;

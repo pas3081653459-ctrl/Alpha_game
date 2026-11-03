@@ -56,16 +56,19 @@ void AAlphaHUD::DrawHUD()
         case EAlphaRoundState::Waiting:
             Objective = State->StoryStage == EAlphaStoryStage::Ready
                 ? TEXT("Mission accepted. TAB: host starts this chapter.")
-                : TEXT("Find the guide on the LEFT. F: talk / accept mission.");
+                : TEXT("Find the chapter guide. F: talk / accept mission.");
             break;
         case EAlphaRoundState::Fighting:
             Objective = State->EncounterStage == EAlphaEncounterStage::Boss ? TEXT("Defeat the Forge Warden. Watch the marked ground.")
                 : FString::Printf(TEXT("WAVE %d / %d   |   %d enemies remaining"), State->Wave, State->GetChapterWaveCount(), State->RemainingEnemies);
             break;
-        case EAlphaRoundState::Intermission: Objective = TEXT("NEXT ENCOUNTER  /  3 seconds"); break;
+        case EAlphaRoundState::Intermission:
+            Objective = State->bAwaitingRouteAdvance ? TEXT("FOLLOW THE MARKER / Regroup before the next encounter")
+                : TEXT("NEXT ENCOUNTER");
+            break;
         case EAlphaRoundState::Victory:
             Objective = State->StoryStage == EAlphaStoryStage::Debrief
-                ? TEXT("Return to the guide on the LEFT. F: report back.")
+                ? TEXT("Return to the chapter guide. F: report back.")
                 : (Chapter < 2 ? TEXT("Chapter complete. TAB: host continues the journey.")
                     : TEXT("Journey complete. The city's story continues..."));
             break;
@@ -73,6 +76,20 @@ void AAlphaHUD::DrawHUD()
         }
     }
     Text(Objective, FLinearColor(.9f, .91f, .85f), 29, 76);
+    if (State && State->bAwaitingRouteAdvance)
+    {
+        FVector2D Marker;
+        if (PlayerOwner->ProjectWorldLocationToScreen(State->RouteObjective + FVector(0, 0, 80), Marker))
+        {
+            const APawn* Pawn = PlayerOwner->GetPawn();
+            const float Meters = Pawn ? FVector::Dist2D(Pawn->GetActorLocation(), State->RouteObjective) / 100.f : 0.f;
+            const TCHAR* Direction = Marker.X < 100.f ? TEXT("< ") : (Marker.X > Width - 100.f ? TEXT("> ") : TEXT(""));
+            Marker.X = FMath::Clamp(Marker.X, 100., FMath::Max(100., static_cast<double>(Width) - 100.));
+            Marker.Y = FMath::Clamp(Marker.Y, 145., FMath::Max(145., static_cast<double>(Height) - 220.));
+            DrawRect(Gold, Marker.X - 4, Marker.Y - 12, 8, 24);
+            Text(FString::Printf(TEXT("%sNEXT ENCOUNTER / %.0fm"), Direction, Meters), Gold, Marker.X - 80, Marker.Y - 36, .95f);
+        }
+    }
 
     for (TActorIterator<AAlphaStoryNPC> It(GetWorld()); It; ++It)
     {

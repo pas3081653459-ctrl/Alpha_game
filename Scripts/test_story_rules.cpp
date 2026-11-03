@@ -66,6 +66,17 @@ int main()
         Check(!WithinConversationRange(0., Invalid), "Nonfinite height rejected");
     }
     Check(WaveCount(std::numeric_limits<int>::max()) == 0, "Extreme chapter rejected without overflow");
+    Check(CanActivateEncounter(420.,1100.), "Exact entrance and party bounds activate");
+    Check(!CanActivateEncounter(420.01,1100.), "A human must reach the encounter entrance");
+    Check(!CanActivateEncounter(0.,1100.01), "Distant downed or living teammate prevents abandonment");
+    Check(!CanActivateEncounter(-1.,0.), "Negative human distance rejected");
+    Check(!CanActivateEncounter(0.,-1.), "Negative party distance rejected");
+    for (double Invalid : {std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity(),
+        -std::numeric_limits<double>::infinity()})
+    {
+        Check(!CanActivateEncounter(Invalid,0.), "Nonfinite human position rejected");
+        Check(!CanActivateEncounter(0.,Invalid), "Nonfinite teammate position rejected");
+    }
     Check(!CanAdvance(std::numeric_limits<int>::min(), Stage::Complete, true), "Negative extreme chapter cannot advance");
     std::cout << "Portable story rules: " << Checks - Failures << '/' << Checks << " checks passed\n";
     std::cout << "Unreal dialogue, chapter travel, replication and rendering remain separate tests.\n";

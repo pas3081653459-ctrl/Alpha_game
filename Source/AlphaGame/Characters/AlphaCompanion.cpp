@@ -12,7 +12,33 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "Rules/CompanionRules.h"
+#include "Rules/LevelLayoutRules.h"
 #include "World/AlphaGameState.h"
+
+namespace AlphaCompanionRoute
+{
+int32 Chapter(const UWorld* World)
+{
+    const AAlphaGameState* State = World ? World->GetGameState<AAlphaGameState>() : nullptr;
+    return State ? State->ChapterIndex : 0;
+}
+
+AlphaLayoutRules::Point Local(const UWorld* World, const FVector& Location)
+{
+    const FVector Origin = AAlphaGameState::GetChapterOrigin(Chapter(World));
+    return {Location.X - Origin.X, Location.Y - Origin.Y};
+}
+
+bool Contains(const UWorld* World, const FVector& Location)
+{
+    return AlphaLayoutRules::IsWalkable(Chapter(World), Local(World, Location));
+}
+
+bool Clear(const UWorld* World, const FVector& From, const FVector& To, double Margin = 45.)
+{
+    return AlphaLayoutRules::SegmentClear(Chapter(World), Local(World, From), Local(World, To), Margin);
+}
+}
 
 AAlphaCompanion::AAlphaCompanion()
 {
@@ -103,7 +129,8 @@ AAlphaCharacter* AAlphaCompanion::FindHumanAnchor() const
     for (TActorIterator<AAlphaCharacter> It(GetWorld()); It; ++It)
     {
         AAlphaCharacter* Candidate = *It;
-        if (!Candidate->IsPlayerControlled() || !Candidate->IsCoopParticipant()) continue;
+        if (!Candidate->IsPlayerControlled() || !Candidate->IsCoopParticipant()
+            || !AlphaCompanionRoute::Contains(GetWorld(), Candidate->GetActorLocation())) continue;
         const float Distance = FVector::DistSquared2D(GetActorLocation(), Candidate->GetActorLocation());
         if (Candidate->GetCombatComponent()->IsAlive() && !Candidate->IsDefeated())
         {
@@ -123,7 +150,8 @@ AAlphaCharacter* AAlphaCompanion::FindDownedAlly() const
     {
         AAlphaCharacter* Candidate = *It;
         if (Candidate == this || !Candidate->IsCoopParticipant() || !Candidate->IsDefeated()
-            || Candidate->GetCombatComponent()->IsAlive() || IsDangerous(Candidate->GetActorLocation())) continue;
+            || Candidate->GetCombatComponent()->IsAlive() || IsDangerous(Candidate->GetActorLocation())
+            || !AlphaCompanionRoute::Contains(GetWorld(), Candidate->GetActorLocation())) continue;
         AAlphaCharacter* Rescuer = Candidate->GetReviveComponent()->GetCurrentRescuer();
         if (IsValid(Rescuer) && Rescuer != this) continue;
         const float Distance = FVector::DistSquared2D(GetActorLocation(), Candidate->GetActorLocation());
@@ -141,7 +169,8 @@ AAlphaCharacter* AAlphaCompanion::FindEnemy(const AAlphaCharacter* Human) const
     {
         AAlphaCharacter* Candidate = *It;
         if (Candidate == this || Candidate->GetCombatComponent()->TeamId != 2
-            || !Candidate->GetCombatComponent()->IsAlive() || Candidate->IsDefeated()) continue;
+            || !Candidate->GetCombatComponent()->IsAlive() || Candidate->IsDefeated()
+            || !AlphaCompanionRoute::Contains(GetWorld(), Candidate->GetActorLocation())) continue;
         // Stay with the human instead of dragging a solo player toward the opposite end of the arena.
         if (FVector::DistSquared2D(Human->GetActorLocation(), Candidate->GetActorLocation()) > FMath::Square(1100.0f)) continue;
         const float Distance = FVector::DistSquared2D(GetActorLocation(), Candidate->GetActorLocation());
@@ -178,6 +207,7 @@ bool AAlphaCompanion::IsDangerous(const FVector& Location, bool bMargin) const
 
 bool AAlphaCompanion::HasDirectPath(const FVector& Destination) const
 {
+    if (!AlphaCompanionRoute::Clear(GetWorld(), GetActorLocation(), Destination)) return false;
     FCollisionQueryParams Query(SCENE_QUERY_STAT(AlphaCompanionPath), false, this);
     return !GetWorld()->SweepTestByChannel(GetActorLocation(), Destination, FQuat::Identity, ECC_Pawn,
         FCollisionShape::MakeSphere(32.0f), Query);
@@ -186,8 +216,7 @@ bool AAlphaCompanion::HasDirectPath(const FVector& Destination) const
 bool AAlphaCompanion::ChooseEvadeDestination(FVector& Destination) const
 {
     const FVector Origin = GetActorLocation();
-    const AAlphaGameState* State = GetWorld()->GetGameState<AAlphaGameState>();
-    const FVector ArenaOrigin = AAlphaGameState::GetChapterOrigin(State ? State->ChapterIndex : 0);
+    const int32 Chapter = AlphaCompanionRoute::Chapter(GetWorld());
     if (!IsDangerous(Origin)) { Destination = Origin; return true; }
     bool bFound = false;
     float BestDistance = TNumericLimits<float>::Max();
@@ -198,8 +227,9 @@ bool AAlphaCompanion::ChooseEvadeDestination(FVector& Destination) const
         {
             const float Angle = 2.0f * PI * Index / 16.0f;
             FVector Candidate = Origin + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0) * Radius;
-            Candidate.X = FMath::Clamp(Candidate.X, ArenaOrigin.X - 1250., ArenaOrigin.X + 1250.);
-            Candidate.Y = FMath::Clamp(Candidate.Y, -300.0f, 300.0f);
+            // Reject off-route escape points rather than folding them across a
+            // missing bridge corner or onto the far side of a boundary wall.
+            if (!AlphaLayoutRules::IsWalkable(Chapter, AlphaCompanionRoute::Local(GetWorld(), Candidate), 45.)) continue;
             if (IsDangerous(Candidate) || !HasDirectPath(Candidate)) continue;
             const float Distance = FVector::DistSquared2D(Origin, Candidate);
             if (Distance < BestDistance)
@@ -233,13 +263,22 @@ FVector AAlphaCompanion::AddPersonalSpace(const FVector& Direction) const
 
 void AAlphaCompanion::MoveToward(const FVector& Destination, float AcceptanceRadius)
 {
-    const AAlphaGameState* State = GetWorld()->GetGameState<AAlphaGameState>();
-    const FVector ArenaOrigin = AAlphaGameState::GetChapterOrigin(State ? State->ChapterIndex : 0);
-    DesiredDestination = FVector(FMath::Clamp(Destination.X, ArenaOrigin.X - 1250., ArenaOrigin.X + 1250.),
-        FMath::Clamp(Destination.Y, -300.0f, 300.0f), GetActorLocation().Z);
+    const int32 Chapter = AlphaCompanionRoute::Chapter(GetWorld());
+    const FVector ArenaOrigin = AAlphaGameState::GetChapterOrigin(Chapter);
+    const AlphaLayoutRules::Point From = AlphaCompanionRoute::Local(GetWorld(), GetActorLocation());
+    const AlphaLayoutRules::Point Goal = AlphaLayoutRules::Project(Chapter, AlphaCompanionRoute::Local(GetWorld(), Destination));
+    DesiredDestination = ArenaOrigin + FVector(Goal.X, Goal.Y, GetActorLocation().Z - ArenaOrigin.Z);
     const FVector Delta = DesiredDestination - GetActorLocation();
     if (Delta.SizeSquared2D() <= FMath::Square(AcceptanceRadius)) { StopMoving(); return; }
-    DesiredMove = BotAction == EAlphaCompanionAction::Evade ? Delta.GetSafeNormal2D() : AddPersonalSpace(Delta.GetSafeNormal2D());
+    const AlphaLayoutRules::Point Waypoint = AlphaLayoutRules::NextWaypoint(Chapter, From, Goal);
+    const FVector RouteDelta(Waypoint.X - From.X, Waypoint.Y - From.Y, 0.);
+    if (RouteDelta.SizeSquared2D() < .25) { StopMoving(); return; }
+    const FVector RouteDirection = RouteDelta.GetSafeNormal2D();
+    DesiredMove = BotAction == EAlphaCompanionAction::Evade ? RouteDirection : AddPersonalSpace(RouteDirection);
+    // Personal-space separation may push sideways at a narrow bridge. Keep its
+    // next short step inside the same collision layout, or use the route line.
+    const FVector Probe = GetActorLocation() + DesiredMove * 75.f;
+    if (!AlphaCompanionRoute::Clear(GetWorld(), GetActorLocation(), Probe)) DesiredMove = RouteDirection;
     FaceMoveIntent(DesiredMove);
 }
 
@@ -269,6 +308,7 @@ void AAlphaCompanion::Follow(AAlphaCharacter* Human)
 bool AAlphaCompanion::TrySkill(AAlphaCharacter* Enemy)
 {
     if (!Enemy || !CombatComponent->CanAct()) return false;
+    if (!AlphaCompanionRoute::Clear(GetWorld(), GetActorLocation(), Enemy->GetActorLocation(), 0.)) return false;
     const FVector Delta = Enemy->GetActorLocation() - GetActorLocation();
     FaceMoveIntent(Delta);
     const float Distance = Delta.Size();
@@ -281,6 +321,8 @@ bool AAlphaCompanion::TrySkill(AAlphaCharacter* Enemy)
         if (!GetAbilityComponent()->CanUseSkill(Slot)) continue;
         // A dash into an active floor tell is never a valid defensive response.
         if (GetArchetype() == 1 && Slot == 0 && !Threats.IsEmpty()) continue;
+        if (GetArchetype() == 1 && Slot == 0 && !AlphaCompanionRoute::Clear(GetWorld(), GetActorLocation(),
+            GetActorLocation() + GetActorForwardVector() * 420.f)) continue;
         if (!AlphaCompanionRules::ShouldUseSkill(GetArchetype(), Slot, Distance, true,
             GetAbilityComponent()->GetSkillRemaining(Slot), CombatComponent->CanAct(), GetAbilityComponent()->GetEnergy())) continue;
         if (!AlphaCompanionRules::InSkillFootprint(GetArchetype(), Slot,
@@ -301,7 +343,8 @@ void AAlphaCompanion::Attack(AAlphaCharacter* Enemy)
     FaceMoveIntent(Delta);
     if (TrySkill(Enemy)) { StopMoving(); return; }
     if (AlphaCompanionRules::InMeleeRange(FVector::DotProduct(Delta, GetActorForwardVector()),
-        FVector::DotProduct(Delta, GetActorRightVector()), Delta.Z))
+        FVector::DotProduct(Delta, GetActorRightVector()), Delta.Z)
+        && AlphaCompanionRoute::Clear(GetWorld(), GetActorLocation(), Enemy->GetActorLocation(), 0.))
     {
         StopMoving();
         if (ServerTime() >= NextAttackAt)
@@ -329,7 +372,11 @@ void AAlphaCompanion::Rescue(AAlphaCharacter* Ally)
 {
     if (!Ally) { GetReviveComponent()->EndRevive(); StopMoving(); return; }
     const float Distance = FVector::Dist(GetActorLocation(), Ally->GetActorLocation());
-    if (Distance <= 195.0f)
+    FCollisionQueryParams Sight(SCENE_QUERY_STAT(AlphaCompanionRescueApproach), false, this);
+    Sight.AddIgnoredActor(Ally);
+    const bool bClearRescue = AlphaCompanionRoute::Clear(GetWorld(), GetActorLocation(), Ally->GetActorLocation(), 0.)
+        && !GetWorld()->LineTraceTestByChannel(GetActorLocation(), Ally->GetActorLocation(), ECC_Visibility, Sight);
+    if (Distance <= 195.0f && bClearRescue)
     {
         StopMoving();
         GetReviveComponent()->BeginRevive();
@@ -342,10 +389,11 @@ void AAlphaCompanion::Rescue(AAlphaCharacter* Ally)
         }
         return;
     }
-    const FVector Delta = Ally->GetActorLocation() - GetActorLocation();
-    const FVector Approach = Ally->GetActorLocation() - Delta.GetSafeNormal2D() * 150.0f;
-    if (IsDangerous(Approach)) { SetAction(EAlphaCompanionAction::Evade); StopMoving(); return; }
-    MoveToward(Approach, 25.0f);
+    // A downed ally may be close in Euclidean distance but around a bridge
+    // corner. Route toward their floor rather than repeatedly attempting a
+    // blocked rescue from the other side of the boundary.
+    if (IsDangerous(Ally->GetActorLocation())) { SetAction(EAlphaCompanionAction::Evade); StopMoving(); return; }
+    MoveToward(Ally->GetActorLocation(), bClearRescue ? 150.f : 25.f);
 }
 
 void AAlphaCompanion::Decide()
@@ -353,11 +401,29 @@ void AAlphaCompanion::Decide()
     DesiredMove = FVector::ZeroVector;
     const AAlphaGameState* State = GetWorld()->GetGameState<AAlphaGameState>();
     if (!IsCoopParticipant() || IsDefeated() || !CombatComponent->IsAlive() || !State
-        || State->RoundState == EAlphaRoundState::Victory || State->RoundState == EAlphaRoundState::Defeat)
+        || State->RoundState == EAlphaRoundState::Defeat)
     {
         GetReviveComponent()->EndRevive();
         StopMoving();
         SetAction(EAlphaCompanionAction::Idle);
+        return;
+    }
+    if (State->RoundState == EAlphaRoundState::Victory)
+    {
+        // The chapter now continues back to its guide. A last AI victory must
+        // not leave the only human downed, unable to confirm the story debrief.
+        if (!CombatComponent->CanAct()) { StopMoving(); return; }
+        if (AAlphaCharacter* Downed = FindDownedAlly())
+        {
+            SetAction(EAlphaCompanionAction::Revive);
+            Rescue(Downed);
+        }
+        else
+        {
+            GetReviveComponent()->EndRevive();
+            SetAction(EAlphaCompanionAction::Follow);
+            Follow(FindHumanAnchor());
+        }
         return;
     }
     GatherBossThreats();

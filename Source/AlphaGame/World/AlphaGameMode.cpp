@@ -3,6 +3,7 @@
 #include "World/AlphaBreakableProp.h"
 #include "World/AlphaStoryNPC.h"
 #include "Rules/StoryRules.h"
+#include "Rules/LevelLayoutRules.h"
 #include "World/AlphaPlayerController.h"
 #include "Characters/AlphaCharacter.h"
 #include "Characters/AlphaEnemy.h"
@@ -194,7 +195,8 @@ void AAlphaGameMode::RefreshCompanions()
     {
         if (AAlphaCharacter* Character = Cast<AAlphaCharacter>(Human->GetPawn()))
         {
-            if (FMath::Abs(Character->GetActorLocation().X - ChapterOrigin.X) > 1500.f)
+            const double LocalX = Character->GetActorLocation().X - ChapterOrigin.X;
+            if (LocalX < -1500. || LocalX > 2600.)
                 Character->TeleportTo(ChapterOrigin + FVector(-650, -100, 110), FRotator::ZeroRotator, false, true);
         }
     }
@@ -271,8 +273,41 @@ bool AAlphaGameMode::StartPrototypeRun()
     State->EncounterStage = EAlphaEncounterStage::Waves;
     State->StoryStage = EAlphaStoryStage::Combat;
     EnsureRoundMonitor();
-    StartNextWave();
-    return State->RoundState == EAlphaRoundState::Fighting;
+    QueueRouteEncounter(false);
+    return true;
+}
+
+void AAlphaGameMode::QueueRouteEncounter(bool bBoss)
+{
+    AAlphaGameState* State = GetGameState<AAlphaGameState>();
+    if (!HasAuthority() || !State) return;
+    GetWorldTimerManager().ClearTimer(WaveTimer);
+    const AlphaLayoutRules::Point Anchor = bBoss ? AlphaLayoutRules::BossSpawn(State->ChapterIndex)
+        : AlphaLayoutRules::EncounterAnchor(State->ChapterIndex, State->Wave + 1);
+    State->RouteObjective = AAlphaGameState::GetChapterOrigin(State->ChapterIndex) + FVector(Anchor.X, Anchor.Y, 0);
+    State->bAwaitingRouteAdvance = true;
+    State->RoundState = EAlphaRoundState::Intermission;
+    RouteReadyAt = GetWorld()->GetTimeSeconds() + 1.5;
+    State->ForceNetUpdate();
+}
+
+bool AAlphaGameMode::IsPartyAtRouteObjective() const
+{
+    const AAlphaGameState* State = GetGameState<AAlphaGameState>();
+    if (!State || !State->bAwaitingRouteAdvance) return false;
+    double ClosestHuman = TNumericLimits<double>::Max();
+    double FarthestParticipant = 0.;
+    for (TActorIterator<AAlphaCharacter> It(GetWorld()); It; ++It)
+    {
+        if (!It->IsCoopParticipant()) continue;
+        const double Distance = FVector::Dist2D(It->GetActorLocation(), State->RouteObjective);
+        if (!FMath::IsFinite(Distance)) return false;
+        // Include downed teammates: the route must not abandon a rescuer behind.
+        FarthestParticipant = FMath::Max(FarthestParticipant, Distance);
+        if (Cast<APlayerController>(It->GetController()) && It->GetCombatComponent()->IsAlive())
+            ClosestHuman = FMath::Min(ClosestHuman, Distance);
+    }
+    return AlphaStoryRules::CanActivateEncounter(ClosestHuman, FarthestParticipant);
 }
 
 void AAlphaGameMode::MarkDefeat()
@@ -291,6 +326,11 @@ void AAlphaGameMode::MarkDefeat()
 
 void AAlphaGameMode::ClearEncounterActors()
 {
+    if (AAlphaGameState* State = GetGameState<AAlphaGameState>())
+    {
+        State->bAwaitingRouteAdvance = false;
+        State->RouteObjective = FVector::ZeroVector;
+    }
     const auto DestroyEnemy = [](APawn* Enemy)
     {
         AController* Controller = Enemy->GetController();
@@ -309,6 +349,7 @@ void AAlphaGameMode::StartNextWave()
     AAlphaGameState* State = GetGameState<AAlphaGameState>();
     if (!State || HumanControllers().IsEmpty()) return;
     if (State->RoundState != EAlphaRoundState::Waiting && State->RoundState != EAlphaRoundState::Intermission) return;
+    if (State->bAwaitingRouteAdvance) return;
     if (State->EncounterStage != EAlphaEncounterStage::Waves || State->Wave >= State->GetChapterWaveCount()) return;
     State->Wave++;
     State->RoundState = EAlphaRoundState::Fighting;
@@ -318,8 +359,28 @@ void AAlphaGameMode::StartNextWave()
     {
         FActorSpawnParameters Params;
         Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+        AlphaLayoutRules::Point Local = AlphaLayoutRules::EnemySpawn(State->ChapterIndex, State->Wave, Index);
+        bool bSafeSpawn = false;
+        for (int32 Attempt = 0; Attempt < 16; ++Attempt)
+        {
+            Local = AlphaLayoutRules::EnemySpawn(State->ChapterIndex, State->Wave, Index + Attempt);
+            if (!AlphaLayoutRules::IsWalkable(State->ChapterIndex, Local, 45.)) continue;
+            const FVector Candidate = AAlphaGameState::GetChapterOrigin(State->ChapterIndex) + FVector(Local.X, Local.Y, 0);
+            bool bClear = true;
+            for (TActorIterator<AAlphaCharacter> It(GetWorld()); It; ++It)
+            {
+                const bool bParticipant = It->IsCoopParticipant();
+                const bool bLiveEnemy = It->GetCombatComponent()->TeamId == 2 && It->GetCombatComponent()->IsAlive();
+                const double Clearance = bParticipant ? 220. : 110.;
+                if ((bParticipant || bLiveEnemy)
+                    && FVector::DistSquared2D(It->GetActorLocation(), Candidate) < FMath::Square(Clearance))
+                    { bClear = false; break; }
+            }
+            if (bClear) { bSafeSpawn = true; break; }
+        }
+        if (!bSafeSpawn) continue;
         const FVector Location = AAlphaGameState::GetChapterOrigin(State->ChapterIndex)
-            + FVector(650.f + (Index % 2) * 180.f, -240.f + (Index % 4) * 150.f, 110.f);
+            + FVector(Local.X, Local.Y, 110. + AlphaLayoutRules::SurfaceHeight(State->ChapterIndex, Local));
         AAlphaEnemy* Enemy = GetWorld()->SpawnActor<AAlphaEnemy>(AAlphaEnemy::StaticClass(), Location, FRotator(0, 180, 0), Params);
         if (Enemy) WaveEnemies.Add(Enemy);
     }
@@ -336,10 +397,13 @@ void AAlphaGameMode::StartBossEncounter()
 {
     AAlphaGameState* State = GetGameState<AAlphaGameState>();
     if (!State || HumanControllers().IsEmpty() || State->RoundState != EAlphaRoundState::Intermission) return;
+    if (State->bAwaitingRouteAdvance) return;
     if (State->EncounterStage != EAlphaEncounterStage::Boss || !State->ChapterHasBoss()) return;
     FActorSpawnParameters Params;
     Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-    AAlphaForgeBoss* Boss = GetWorld()->SpawnActor<AAlphaForgeBoss>(AAlphaForgeBoss::StaticClass(), AAlphaGameState::GetChapterOrigin(State->ChapterIndex) + FVector(800, 0, 150), FRotator(0, 180, 0), Params);
+    const AlphaLayoutRules::Point Local = AlphaLayoutRules::BossSpawn(State->ChapterIndex);
+    AAlphaForgeBoss* Boss = GetWorld()->SpawnActor<AAlphaForgeBoss>(AAlphaForgeBoss::StaticClass(),
+        AAlphaGameState::GetChapterOrigin(State->ChapterIndex) + FVector(Local.X, Local.Y, 150), FRotator(0, 180, 0), Params);
     if (!Boss)
     {
         MarkDefeat();
@@ -387,6 +451,14 @@ void AAlphaGameMode::CheckRound()
         MarkDefeat();
         return;
     }
+    if (State->bAwaitingRouteAdvance)
+    {
+        if (GetWorld()->GetTimeSeconds() < RouteReadyAt || !IsPartyAtRouteObjective()) return;
+        State->bAwaitingRouteAdvance = false;
+        if (State->EncounterStage == EAlphaEncounterStage::Boss) StartBossEncounter();
+        else StartNextWave();
+        return;
+    }
     if (State->EncounterStage == EAlphaEncounterStage::Boss)
     {
         if (State->RoundState == EAlphaRoundState::Intermission) return;
@@ -417,13 +489,13 @@ void AAlphaGameMode::CheckRound()
             if (State->ChapterHasBoss())
             {
                 State->EncounterStage = EAlphaEncounterStage::Boss;
-                GetWorldTimerManager().SetTimer(WaveTimer, this, &AAlphaGameMode::StartBossEncounter, 3.f, false);
+                QueueRouteEncounter(true);
             }
             else MarkChapterVictory();
         }
         else
         {
-            GetWorldTimerManager().SetTimer(WaveTimer, this, &AAlphaGameMode::StartNextWave, 3.f, false);
+            QueueRouteEncounter(false);
         }
     }
 }
@@ -491,6 +563,7 @@ void AAlphaGameMode::MarkChapterVictory()
     if (AAlphaGameState* State = GetGameState<AAlphaGameState>())
     {
         State->RemainingEnemies = 0;
+        State->bAwaitingRouteAdvance = false;
         State->RoundState = EAlphaRoundState::Victory;
         State->EncounterStage = EAlphaEncounterStage::Finished;
         State->StoryStage = EAlphaStoryStage::Debrief;
