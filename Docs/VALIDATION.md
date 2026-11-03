@@ -63,3 +63,9 @@
 - 当前简化跟随和避险不是复杂导航，没有AI实际移动、可靠通关或多人复制验收结论。开发命令 `TestDownSelf` 只在非Shipping构建生效。
 
 测试流程与限制见 `COMPANION_TESTING.md`。
+
+## Mac UE5.6 编译日志修复
+
+用户实际 Mac arm64 日志已进入 C++ 编译，报告 `AlphaPartyTests.cpp` 三处 `TestNotNull` 无法从 `TObjectPtr<APawn>` 推导裸指针模板，以及角色网络更新频率字段的两个弃用警告。现已为三处断言指定 `APawn` 模板类型，保留非空断言与测试；网络频率改用 UE5.6 推荐的 setter API。其它测试参数已扫描，未发现相同直接推导用法。
+
+当前云环境仍无 Unreal，不能据此声明修复后 Mac 完整编译已通过；需要拉取更新后重跑原 Mac 构建命令。没有关闭测试、降低编译检查或删除断言。

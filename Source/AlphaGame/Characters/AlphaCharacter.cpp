@@ -23,8 +23,8 @@ AAlphaCharacter::AAlphaCharacter()
     PrimaryActorTick.bCanEverTick = false;
     bReplicates = true;
     SetReplicateMovement(true);
-    NetUpdateFrequency = 60.0f;
-    MinNetUpdateFrequency = 20.0f;
+    SetNetUpdateFrequency(60.0f);
+    SetMinNetUpdateFrequency(20.0f);
 
     GetCapsuleComponent()->InitCapsuleSize(34.0f, 88.0f);
     GetCharacterMovement()->MaxWalkSpeed = 480.0f;

@@ -9,6 +9,7 @@
 #include "EngineUtils.h"
 #include "Misc/AutomationTest.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/Pawn.h"
 #include "World/AlphaGameMode.h"
 #include "World/AlphaGameState.h"
 
@@ -61,7 +62,8 @@ bool FAlphaPartyLifecycleTest::RunTest(const FString& Parameters)
     };
     APlayerController* First = AddHuman(0, 0);
     if (!TestNotNull(TEXT("First human controller exists"), First)
-        || !TestNotNull(TEXT("First human pawn exists"), First->GetPawn())) return false;
+        // UE5.6 can return TObjectPtr here; explicit APawn allows its pointer conversion.
+        || !TestNotNull<APawn>(TEXT("First human pawn exists"), First->GetPawn())) return false;
     const int32 OriginalPlayerStateCount = State->PlayerArray.Num();
     Mode->RefreshCompanions();
     TestEqual(TEXT("One human receives two companions"), State->CompanionCount, 2);
@@ -91,13 +93,13 @@ bool FAlphaPartyLifecycleTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("Fill can be enabled again in preparation"), Mode->SetCompanionFillEnabled(true));
     APlayerController* Second = AddHuman(1, 0);
     if (!TestNotNull(TEXT("Second human exists"), Second)
-        || !TestNotNull(TEXT("Second human pawn exists"), Second->GetPawn())) return false;
+        || !TestNotNull<APawn>(TEXT("Second human pawn exists"), Second->GetPawn())) return false;
     Mode->RefreshCompanions();
     TestEqual(TEXT("Second human replaces one companion"), State->CompanionCount, 1);
     TestEqual(TEXT("Two human seats are reported"), State->HumanPlayerCount, 2);
     APlayerController* Third = AddHuman(2, 1);
     if (!TestNotNull(TEXT("Third human exists"), Third)
-        || !TestNotNull(TEXT("Third human pawn exists"), Third->GetPawn())) return false;
+        || !TestNotNull<APawn>(TEXT("Third human pawn exists"), Third->GetPawn())) return false;
     Mode->RefreshCompanions();
     TestEqual(TEXT("Three humans need no AI"), State->CompanionCount, 0);
     TestEqual(TEXT("All companion controllers were cleaned"), ControllerCount(), 0);
