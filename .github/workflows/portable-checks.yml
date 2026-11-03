@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          lfs: true
       - name: Check project wiring
         run: python3 Scripts/check_project.py
       - name: Compile and run shared gameplay rules
@@ -40,3 +42,9 @@ jobs:
         run: python3 Scripts/run_level_layout_tests.py
       - name: Check undefined behavior in level layout rules
         run: python3 Scripts/run_level_layout_tests.py --sanitize
+      - name: Compile and run enemy tactics
+        run: python3 Scripts/run_enemy_tactics_tests.py
+      - name: Check undefined behavior in enemy tactics
+        run: python3 Scripts/run_enemy_tactics_tests.py --sanitize
+      - name: Verify original audio source integrity
+        run: python3 Scripts/generate_audio_sources.py --check

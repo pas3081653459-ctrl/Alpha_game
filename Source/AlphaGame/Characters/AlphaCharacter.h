@@ -47,6 +47,8 @@ public:
 
     /** Combat must already have successfully revived; restores the character's replicated movement state. */
     bool RecoverFromRevive();
+    /** Authority-only defense adjustment. Never grants damage authority to a client. */
+    virtual void ModifyIncomingHit(float& Damage, float& PoiseDamage, AActor* Source) {}
 
     /** Called by the authority when restarting a round. */
     UFUNCTION(BlueprintCallable, Category = "Combat")

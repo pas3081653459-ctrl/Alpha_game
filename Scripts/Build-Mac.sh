@@ -43,6 +43,11 @@ for package in ['Materials/M_AlphaSurface', 'Materials/M_AlphaEffect', 'Textures
     assert (root / f'Content/Art/{package}.uasset').is_file(), f'Missing art asset: {package}'
 print(f'Art save/parameter report: {report}. Rendering and shader errors still need UE verification.')
 PY
+mkdir -p "$project_root/Artifacts/Audio"
+audio_report="$(mktemp "$project_root/Artifacts/Audio/mac-audio.XXXXXX")"
+ALPHA_AUDIO_REPORT="$audio_report" "$editor" "$project" -run=pythonscript \
+    "-script=$script_dir/create_audio_assets.py" -unattended -nop4 -NullRHI -stdout
+python3 "$script_dir/validate_audio_report.py" "$project_root" "$audio_report"
 if [[ "$action" == Test ]]; then
     mkdir -p "$project_root/Artifacts/Tests"
     test_report="$(mktemp -d "$project_root/Artifacts/Tests/mac-tests.XXXXXX")"

@@ -15,6 +15,8 @@ Windows 三人局域网 2.5D 合作动作闯关项目，使用 **Unreal Engine 5
 - J 五段循环连招：正斩、反斩、上挑、突刺、下砸；支持空中连招、受限滞空、输入缓冲与受击取消。
 - WASD 完整方向移动/转身；同方向双击后按住进入 2.5 倍奔跑，带风线特效；K 跳跃、L 朝面向翻滚。
 - 服务端权威伤害、友伤过滤、闪避无敌、技能冷却与 U/I/O 能量。
+- 近战兵、盾役、炉枪兵混编；盾役可绕侧/破势，枪兵有固定方向延迟枪线预警，每目标最多两名普通敌人进攻。
+- 命中局部姿态停顿与轻微镜头冲击，六种原创合成战斗音效。
 - 能量初始 0：U 成功 +10，I 成功消耗 10，O 满 100 才可释放并消耗 100；普攻命中不加能量。
 - 合作跟进仍可增加敌人架势伤害，但不再产生能量或自动强化普通技能。
 - 持续按住 E 救援：距离、视线和独占目标检查；离距、受击、松手、死亡与断线中断；完成恢复 40% 生命。
@@ -82,7 +84,7 @@ Mac 推荐一次完成编译与材质生成（关闭正在运行的编辑器）�
 ./Scripts/Build-Mac.sh "/Users/Shared/Epic Games/UE_5.6"
 ```
 
-该脚本验证本次 revision 3 报告与五个生成资产；`Test` 参数另执行UE测试并逐项检查报告。云端仅做Shell语法检查，尚未在Mac运行。Windows `Build` / `Test` / `Package` 也会生成材质，减少漏跑步骤。
+该脚本验证本次 revision 3 美术报告与五个美术资产，并导入、验证六个音效资产；`Test` 参数另执行UE测试并逐项检查报告。云端仅做Shell语法检查，尚未在Mac运行。Windows `Build` / `Test` / `Package` 也会生成材质，减少漏跑步骤。
 
 编辑器启动时 `Content/Python/init_unreal.py` 按脚本和源图指纹自动生成/更新自有材质。首次打开请检查Python输出与材质编译状态；自动保存不等于shader通过。手工修改生成器管理的资产前应复制一份。
 
@@ -139,6 +141,9 @@ python3 Scripts/run_story_tests.py
 python3 Scripts/run_story_tests.py --sanitize
 python3 Scripts/run_level_layout_tests.py
 python3 Scripts/run_level_layout_tests.py --sanitize
+python3 Scripts/run_enemy_tactics_tests.py
+python3 Scripts/run_enemy_tactics_tests.py --sanitize
+python3 Scripts/generate_audio_sources.py --check
 ```
 
 - 工程一致性检查通过。
@@ -153,15 +158,15 @@ Windows 引擎环境执行 UE 自动化与打包：
 .\Scripts\Build-Windows.ps1 -EngineRoot 'C:\Program Files\Epic Games\UE_5.6' -Action Package
 ```
 
-目前有 **38 项 UE Automation 测试源码**，覆盖战斗、连招、空中取消、方向/奔跑、救援、能量、Boss、AI 同伴和队伍生命周期。脚本从源码提取完整测试名，要求本次报告中逐项成功，拒绝零测试、漏项、失败或未完成。报告位于 `Artifacts/Tests/`，Development 包位于 `Artifacts/Windows/`。
+目前有 **45 项 UE Automation 测试源码**，覆盖战斗、连招、空中取消、方向/奔跑、救援、能量、Boss、AI 同伴和队伍生命周期。脚本从源码提取完整测试名，要求本次报告中逐项成功，拒绝零测试、漏项、失败或未完成。报告位于 `Artifacts/Tests/`，Development 包位于 `Artifacts/Windows/`。
 
-**Unreal 编译、这 38 项 UE 测试、PowerShell、渲染、打包和三台 Windows 设备联机均未执行。**当前 Linux 云机器没有 Unreal Editor/UnrealBuildTool，测试结果不能替代这些门槛。
+**Unreal 编译、这 45 项 UE 测试、PowerShell、渲染、打包和三台 Windows 设备联机均未执行。**当前 Linux 云机器没有 Unreal Editor/UnrealBuildTool，测试结果不能替代这些门槛。
 
 ## 已知范围
 
-场景和角色已由基础几何组合为程序化美术，但仍没有正式手工模型、骨骼动画、声音、正式骨骼连段动画、局部顿帧或六关内容。技能效果与 Boss 预警均采用可保留于 Shipping 的实际网格，效果通过缩小与亮度衰减消失，不是透明材质或 Niagara。实际打包可见性待验收。沈砚格挡技能是短时保护与反击爆发原型，尚无成功防反识别。
+场景和角色已由基础几何组合为程序化美术，但仍没有正式手工模型、骨骼动画、配音及成品拟音、正式骨骼连段动画、局部顿帧或六关内容。技能效果与 Boss 预警均采用可保留于 Shipping 的实际网格，效果通过缩小与亮度衰减消失，不是透明材质或 Niagara。实际打包可见性待验收。沈砚格挡技能是短时保护与反击爆发原型，尚无成功防反识别。
 
-当前敌人没有正式战术进攻名额，缺少存档、画质设置、正式大厅与版本匹配检查。不要用 Shipping 发布未验收内容。
+普通敌人已有每目标两名进攻限制；复杂战术协调、存档、画质设置、正式大厅与版本匹配检查仍待开发。不要用 Shipping 发布未验收内容。
 
 ## 项目管理
 
@@ -170,7 +175,7 @@ Windows 引擎环境执行 UE 自动化与打包：
 - [验收步骤](Docs/ACCEPTANCE.md)
 - [验证证据与阻塞](Docs/VALIDATION.md)
 
-本轮剧情规则510项、布局5440项普通与UBSan通过，六套总8450项；38项UE测试仅源码、未执行。中文字体、小窗口布局、三章迁移及真实联机仍需UE验收。
+本轮剧情规则510项、布局5440项普通与UBSan通过，七套总8825项；45项UE测试仅源码、未执行。中文字体、小窗口布局、三章迁移及真实联机仍需UE验收。
 
 按路线自动推进独立开发工作；Windows 编译和真实局域网是下一道外部验收门槛。各云任务使用现有隔离目录，无需额外创建 Git worktree。
 
@@ -179,3 +184,7 @@ Windows 引擎环境执行 UE 自动化与打包：
 普通敌人生命55、架势35、单次伤害8、移速210；普通攻击前摇0.30秒、间隔0.85秒。Boss生命为单人360/双人540/三人720（包含AI），三种攻击伤害12/14/20，预警和恢复延长。空中连招停止输入、第五段结束、受击或其他动作取消后恢复下落，同次离地最多悬停3.2秒，不能无限续空。当前仍需 UE 实机确认手感与网络表现。
 
 画面过暗修复：工坊主光已转到镜头侧，提升固定曝光与补光、提亮场景底色并降低金属度；更新后重新生成材质并重启。截图对比仍待实机确认，详见 `Docs/VALIDATION.md`。
+
+用户已反馈旧版NPC交互、剧情推进和刷怪正常；本轮新增敌人战术375项，七套规则共8825项及各自UBSan通过。新敌人、预警与合成音效待UE实机验收，见 [战斗遭遇说明](Docs/COMBAT_ENCOUNTERS.md)。`AlphaAudioVolume 0`可静音本次会话后续战斗音效。
+
+原始WAV按仓库规则使用Git LFS；更新后执行 `git lfs pull`。未安装时先安装Git LFS并执行 `git lfs install`，否则只有文本指针，不能被UE当声音导入。CI checkout已启用LFS。

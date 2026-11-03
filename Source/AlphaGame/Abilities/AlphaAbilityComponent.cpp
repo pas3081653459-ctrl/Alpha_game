@@ -10,6 +10,7 @@
 #include "CollisionQueryParams.h"
 #include "CollisionShape.h"
 #include "Visuals/AlphaCombatEffect.h"
+#include "Visuals/AlphaCombatAudio.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Character.h"
@@ -261,6 +262,8 @@ void UAlphaAbilityComponent::MulticastSkill_Implementation(int32 Archetype, int3
         : (Archetype == 1 ? FLinearColor(.12f, .75f, .8f) : FLinearColor(.9f, .7f, .25f));
     // Snapshot the authority's release transform; replicated movement may arrive later.
     AAlphaCombatEffect::SpawnSkill(GetWorld(), Origin, Facing, Archetype, Slot, Color);
+    AlphaAudio::Play(GetWorld(), Origin, Slot == 2 ? EAlphaSoundCue::Ultimate : EAlphaSoundCue::Skill,
+        Slot == 2 ? .85f : .6f);
 }
 
 void UAlphaAbilityComponent::MulticastCoopCue_Implementation(FVector Location)

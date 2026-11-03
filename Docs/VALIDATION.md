@@ -6,7 +6,7 @@
 
 | 检查 | 结果 | 能证明什么 |
 |---|---|---|
-| `python3 Scripts/check_project.py` | 通过 | 工程描述、59 个必要文件、29 个头文件、输入与本地 include、入口配置；发现 38 项不同的 UE 测试名称 |
+| `python3 Scripts/check_project.py` | 通过 | 工程描述、74 个必要文件、31 个头文件、输入与本地 include、入口配置；发现 45 项不同的 UE 测试名称 |
 | `python3 Scripts/run_rules_tests.py` | 222/222 通过 | 实际共享规则在严格 C++17 编译器中的行为 |
 | `python3 Scripts/run_rules_tests.py --sanitize` | 222/222 通过，无 UBSan 报告 | 同一规则的未定义行为检查 |
 | `python3 Scripts/run_presentation_tests.py` / `--sanitize` | 各320/320通过 | 实际用于镜头距离、平滑、效果衰减的纯计算 |
@@ -31,7 +31,7 @@
 
 ## UE 测试：源码已写，全部未执行
 
-当前共 38 项：Combat 8 项、Combo 6 项、Movement 1 项、Coop 5 项、Abilities 5 项、Encounter 2 项、Companion 6 项、Party 1 项、Environment 1 项、Story 2 项、LevelLayout 1 项。
+当前共 45 项：Combat 8 项、Combo 6 项、Movement 1 项、Coop 5 项、Abilities 5 项、Encounter 2 项、Companion 6 项、Party 1 项、Environment 1 项、Story 2 项、LevelLayout 1 项、EnemyTactics 7 项。
 
 包括伤害/友伤/死亡重置/无敌/救起/硬直、救援恢复/独占/受击/距离/断线/遮挡、技能冷却/非法输入/合作资源，以及 Boss 攻击区域/阶段/人数缩放/防止重复配置回血。
 
@@ -44,7 +44,7 @@
 - 当前 Linux 云机器没有 Unreal Editor、UnrealBuildTool 或 Windows 工具链。没有生成 EXE，没有运行图形、物理命中或三台真实 Windows 设备联机。
 - 正式手工模型、骨骼动画、声音和完整关卡尚未制作；已有程序化造型与网格技能效果。完整主材质 `.uasset` 仍需在引擎运行 Art 生成步骤。
 
-下一执行入口是 README 的 Windows 构建命令。先取得真实 UHT/UBT 结果，再运行 38 项 UE 测试与完整单人/三机流程，按 `ACCEPTANCE.md` 留存日志。引擎验收通过后，按 `PROJECT_PLAN.md` 自动进入工坊垂直切片的动作与美术制作，避免基于未经运行的接口批量生产内容。
+下一执行入口是 README 的 Windows 构建命令。先取得真实 UHT/UBT 结果，再运行 45 项 UE 测试与完整单人/三机流程，按 `ACCEPTANCE.md` 留存日志。引擎验收通过后，按 `PROJECT_PLAN.md` 自动进入工坊垂直切片的动作与美术制作，避免基于未经运行的接口批量生产内容。
 
 ## 美术增量验证
 
@@ -121,3 +121,9 @@
 - 主路改为真实非矩形union，地板/边界/可见面同源；低台30cm真实碰撞，AI/敌人/Boss路由、镜头、出生点与遇敌集结门槛同步。旧整块底板已移除。
 - 严格C++17与各自UBSan通过：战斗222、视觉320、AI784、操作1174、剧情510、布局5440，总8450项。38项UE测试源码未执行，包括新增桥外无隐形底板/连接无内墙/侧庭/低台。
 - Python语法、Shell语法、源图清单校验、工程一致性与diff检查通过。未有UE编译、Python API实际执行、shader编译、场景渲染、实际AI走图与三机验收。不能把source/parameter ready当作美术验收。
+
+## 敌人战术与音效阶段
+
+用户实机反馈确认上一版NPC互动、剧情推进与敌人刷出正常；没有附完整平台/构建日志、UE自动化、全流程或联机证据。本轮新增三敌人职能、每目标最多2进攻名额、延迟枪线预警、盾正面减伤/破势暴露、局部姿态停顿与合成音效，不把旧版反馈视作新功能验收。
+
+七套规则8825项及各自UBSan通过，另6个原始PCM音效的确定性生成/哈希/首尾静音/峰值RMS校验通过。新增7项UE测试，当前45项仅源码。音频UE导入保存、播放与打包、盾/枪表现、姿态停顿与多人节奏均待实际验证。详见COMBAT_ENCOUNTERS.md。

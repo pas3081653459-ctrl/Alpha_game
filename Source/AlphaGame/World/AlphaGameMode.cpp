@@ -4,6 +4,7 @@
 #include "World/AlphaStoryNPC.h"
 #include "Rules/StoryRules.h"
 #include "Rules/LevelLayoutRules.h"
+#include "Rules/EnemyTacticsRules.h"
 #include "World/AlphaPlayerController.h"
 #include "Characters/AlphaCharacter.h"
 #include "Characters/AlphaEnemy.h"
@@ -382,7 +383,11 @@ void AAlphaGameMode::StartNextWave()
         const FVector Location = AAlphaGameState::GetChapterOrigin(State->ChapterIndex)
             + FVector(Local.X, Local.Y, 110. + AlphaLayoutRules::SurfaceHeight(State->ChapterIndex, Local));
         AAlphaEnemy* Enemy = GetWorld()->SpawnActor<AAlphaEnemy>(AAlphaEnemy::StaticClass(), Location, FRotator(0, 180, 0), Params);
-        if (Enemy) WaveEnemies.Add(Enemy);
+        if (Enemy)
+        {
+            Enemy->ConfigureRole(AlphaEnemyRules::RoleForEncounter(State->ChapterIndex, State->Wave, Index));
+            WaveEnemies.Add(Enemy);
+        }
     }
     State->RemainingEnemies = WaveEnemies.Num();
     if (WaveEnemies.IsEmpty())

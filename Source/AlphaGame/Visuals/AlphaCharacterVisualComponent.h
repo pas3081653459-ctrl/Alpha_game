@@ -34,6 +34,8 @@ public:
     void PlayHit(float Damage);
     void PlayPoiseBreak();
     void SetBossTell(int32 Attack, float Progress, bool bWindingUp, bool bRecovering);
+    /** Cosmetic pose hold only; never changes world time or damage timers. */
+    void PausePoseForImpact(float Seconds);
 
     int32 GetVisiblePartCount() const { return Parts.Num(); }
 
@@ -50,6 +52,8 @@ private:
     void BuildSilhouette();
     void BuildWeapon();
     void BuildAnimeDetails();
+    void BuildEnemyTell();
+    void UpdateEnemyPresentation();
     UFUNCTION()
     void PlaySkill(int32 Slot);
     UFUNCTION()
@@ -82,6 +86,14 @@ private:
     TObjectPtr<UStaticMeshComponent> ClothAccent;
     UPROPERTY(Transient)
     TObjectPtr<UInstancedStaticMeshComponent> LanternRing;
+    UPROPERTY(Transient)
+    TObjectPtr<UInstancedStaticMeshComponent> EnemyTell;
+    UPROPERTY(Transient)
+    TObjectPtr<UMaterialInstanceDynamic> EnemyTellMaterial;
+    UPROPERTY(Transient)
+    TObjectPtr<UStaticMeshComponent> ShieldFace;
+    UPROPERTY(Transient)
+    TObjectPtr<UMaterialInstanceDynamic> ShieldMaterial;
 
     UPROPERTY(Transient)
     TObjectPtr<UMaterialInstanceDynamic> ClothMaterial;
@@ -98,6 +110,15 @@ private:
     TArray<float> BaseGlows;
     FTimerHandle TickBudgetTimer;
     int32 HeroType = 0;
+    int32 EnemyRole = 0;
+    bool bEnemyWindingUp = false;
+    bool bShieldGuarding = false;
+    bool bLastShieldGuarding = false;
+    float EnemyTellProgress = 0.f;
+    double PosePausedUntil = -1000.;
+    int32 LastEnemyShotRevision = 0;
+    bool bObservedEnemyShotRevision = false;
+    double EnemyShotVisibleUntil = -1000.;
     bool bEnemyVisual = false;
     bool bBossVisual = false;
     bool bDefeatedVisual = false;

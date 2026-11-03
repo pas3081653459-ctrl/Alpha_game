@@ -40,6 +40,15 @@ def main():
         'Source/AlphaGame/Tests/AlphaStoryNPCTests.cpp',
         'Scripts/run_story_tests.py',
         'Scripts/test_story_rules.cpp',
+        'Source/AlphaGame/Rules/EnemyTacticsRules.h',
+        'Source/AlphaGame/Tests/AlphaEnemyTacticsTests.cpp',
+        'Source/AlphaGame/Visuals/AlphaCombatAudio.h',
+        'Scripts/run_enemy_tactics_tests.py',
+        'Scripts/test_enemy_tactics.cpp',
+        'Scripts/create_audio_assets.py',
+        'Scripts/generate_audio_sources.py',
+        'Scripts/validate_audio_report.py',
+        'SourceAudio/manifest.json',
         'Source/AlphaGame/Rules/LevelLayoutRules.h',
         'Source/AlphaGame/World/AlphaRouteGeometry.h',
         'Source/AlphaGame/Tests/AlphaLevelLayoutTests.cpp',
@@ -73,6 +82,7 @@ def main():
         'SourceArt/Surfaces/T_ForgeDetail.png',
         'SourceArt/Surfaces/T_ForgeNormal_N.png',
     ]
+    required.extend(f'SourceAudio/S_Alpha{name}.wav' for name in ('Slash','Hit','Poise','Roll','Skill','Ultimate'))
     for path in required:
         assert (ROOT / path).is_file(), f'Missing: {path}'
     art_source = ROOT / 'SourceArt/Anime/T_AnimeSurfaceAtlas.png'

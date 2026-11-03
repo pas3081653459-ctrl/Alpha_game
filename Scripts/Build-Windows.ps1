@@ -40,6 +40,32 @@ if ($Action -in @('Build', 'Art', 'Test', 'Package')) {
     }
     Write-Host "Art save report: $ArtReport (visual rendering still requires validation)."
 }
+$AudioReport = Join-Path $ProjectRoot ('Artifacts/Audio/' + [guid]::NewGuid().ToString() + '.json')
+$PreviousAudioReport = $env:ALPHA_AUDIO_REPORT
+try {
+    $env:ALPHA_AUDIO_REPORT = $AudioReport
+    $AudioScript = Join-Path $ProjectRoot 'Scripts/create_audio_assets.py'
+    & $Editor $Project -run=pythonscript "-script=$AudioScript" -unattended -nop4 -NullRHI -stdout
+    $AudioExit = $LASTEXITCODE
+} finally {
+    if ($null -eq $PreviousAudioReport) { Remove-Item Env:ALPHA_AUDIO_REPORT -ErrorAction SilentlyContinue }
+    else { $env:ALPHA_AUDIO_REPORT = $PreviousAudioReport }
+}
+if ($AudioExit -ne 0) { exit $AudioExit }
+if (!(Test-Path $AudioReport)) { throw 'No current audio save report.' }
+$AudioResult = Get-Content -Raw $AudioReport | ConvertFrom-Json
+if ($AudioResult.status -ne 'saved' -or $AudioResult.generator -ne 'AlphaGame.Audio.v1' -or $AudioResult.revision -ne 1) {
+    throw 'Audio import/save did not complete.'
+}
+$AudioNames = @('S_AlphaSlash','S_AlphaHit','S_AlphaPoise','S_AlphaRoll','S_AlphaSkill','S_AlphaUltimate')
+if (@($AudioResult.assets).Count -ne $AudioNames.Count) { throw 'Audio asset report count mismatch.' }
+foreach ($AudioName in $AudioNames) {
+    if ($AudioResult.assets -notcontains "/Game/Audio/Generated/$AudioName" -or
+        !(Test-Path (Join-Path $ProjectRoot "Content/Audio/Generated/$AudioName.uasset"))) {
+        throw "Audio package missing after save: $AudioName"
+    }
+}
+Write-Host "Audio save report: $AudioReport (playback still requires validation)."
 if ($Action -eq 'Test') {
     $Expected = @(Get-ChildItem (Join-Path $ProjectRoot 'Source/AlphaGame/Tests') -Filter '*.cpp' | ForEach-Object {
         $Source = Get-Content -Raw $_.FullName

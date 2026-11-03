@@ -434,6 +434,8 @@ void UAlphaCombatComponent::ReceiveHit(float Damage, float PoiseDamage, AActor* 
 {
     AActor* Owner = GetOwner();
     if (!Owner || !Owner->HasAuthority()) return;
+    if (AAlphaCharacter* Character = Cast<AAlphaCharacter>(Owner))
+        Character->ModifyIncomingHit(Damage, PoiseDamage, InstigatorActor);
     const AlphaRules::DamageResult Result = AlphaRules::ResolveDamage(Health, Poise, MaxHealth, MaxPoise,
         Damage, PoiseDamage, InstigatorActor == Owner || IsFriendly(InstigatorActor), IsInvulnerable());
     if (!Result.Accepted) return;

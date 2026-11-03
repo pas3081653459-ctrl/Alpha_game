@@ -2,6 +2,7 @@
 #include "Abilities/AlphaAbilityComponent.h"
 #include "Characters/AlphaCharacter.h"
 #include "Characters/AlphaCompanion.h"
+#include "Characters/AlphaEnemy.h"
 #include "Characters/Boss/AlphaForgeBoss.h"
 #include "Combat/AlphaCombatComponent.h"
 #include "Coop/AlphaReviveComponent.h"
@@ -164,6 +165,14 @@ void AAlphaHUD::DrawHUD()
         FVector2D Screen;
         if (PlayerOwner->ProjectWorldLocationToScreen(It->GetActorLocation() + FVector(0, 0, 120), Screen))
         {
+            if (const AAlphaEnemy* Enemy = Cast<AAlphaEnemy>(*It))
+            {
+                if (Enemy->GetEnemyRole() == EAlphaEnemyRole::Shield)
+                    Text(Enemy->IsGuardActive() ? TEXT("SHIELD / FLANK OR BREAK") : TEXT("SHIELD / OPEN"),
+                        Gold, Screen.X - 65, Screen.Y - 17, .75f);
+                else if (Enemy->GetEnemyRole() == EAlphaEnemyRole::Gunner)
+                    Text(TEXT("GUNNER / DODGE THE LANE"), FLinearColor(.4f,.8f,1.f), Screen.X - 70, Screen.Y - 17, .75f);
+            }
             if (!Combat->IsAlive()) Text(TEXT("DOWN / HOLD E"), Gold, Screen.X - 42, Screen.Y, .9f);
             else if (Combat->GetHealth() < Combat->GetMaxHealth() || Combat->TeamId == 1)
             {

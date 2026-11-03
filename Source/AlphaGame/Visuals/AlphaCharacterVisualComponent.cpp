@@ -5,8 +5,12 @@
 #include "Combat/AlphaCombatComponent.h"
 #include "Abilities/AlphaAbilityComponent.h"
 #include "Visuals/AlphaCombatEffect.h"
+#include "Visuals/AlphaCombatAudio.h"
 #include "Characters/AlphaCharacter.h"
+#include "Characters/AlphaEnemy.h"
 #include "Rules/PlayerControlRules.h"
+#include "Rules/LevelLayoutRules.h"
+#include "World/AlphaGameState.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -127,6 +131,14 @@ void UAlphaCharacterVisualComponent::ClearParts()
     LeftLeg = RightLeg = LeftArm = RightArm = nullptr;
     ClothAccent = nullptr;
     LanternRing = nullptr;
+    EnemyTell = nullptr;
+    EnemyTellMaterial = nullptr;
+    ShieldFace = nullptr;
+    ShieldMaterial = nullptr;
+    bEnemyWindingUp = false;
+    bShieldGuarding = bLastShieldGuarding = false;
+    bObservedEnemyShotRevision = false;
+    EnemyShotVisibleUntil = -1000.;
     ClothMaterial = MetalMaterial = AccentMaterial = FaceMaterial = GlowMaterial = nullptr;
 }
 
@@ -135,14 +147,17 @@ void UAlphaCharacterVisualComponent::RefreshAppearance(int32 Hero, bool bEnemy, 
     HeroType = FMath::Clamp(Hero, 0, 2);
     bEnemyVisual = bEnemy;
     bBossVisual = bBoss;
+    const AAlphaEnemy* Enemy = Cast<AAlphaEnemy>(GetOwner());
+    EnemyRole = Enemy && bEnemyVisual && !bBossVisual ? static_cast<int32>(Enemy->GetEnemyRole()) : 0;
     if (!BodyRoot || !WeaponRoot) return;
     ClearParts();
     BodyRoot->SetRelativeScale3D(FVector(bBossVisual ? 1.35f : 1.0f));
     WeaponRoot->SetRelativeScale3D(FVector(bBossVisual ? 1.35f : 1.0f));
-    const FLinearColor Accent = bEnemyVisual ? FLinearColor(0.85f, 0.22f, 0.035f)
+    const FLinearColor Accent = bEnemyVisual ? (EnemyRole == 2 ? FLinearColor(.08f, .48f, .88f)
+        : (EnemyRole == 1 ? FLinearColor(.85f, .32f, .07f) : FLinearColor(0.85f, 0.22f, 0.035f)))
         : (HeroType == 0 ? FLinearColor(0.6f, 0.025f, 0.055f)
         : (HeroType == 1 ? FLinearColor(0.025f, 0.5f, 0.42f) : FLinearColor(0.75f, 0.52f, 0.13f)));
-    ClothMaterial = MakeMaterial(bEnemyVisual ? FLinearColor(0.095f, 0.07f, 0.06f) : Accent * 0.7f, 0.02f, 0.78f);
+    ClothMaterial = MakeMaterial(bEnemyVisual ? Accent * .45f : Accent * 0.7f, 0.02f, 0.78f);
     MetalMaterial = MakeMaterial(FLinearColor(.23f, .3f, .38f), .25f, .55f);
     AccentMaterial = MakeMaterial(Accent, bEnemyVisual ? 0.65f : 0.35f, 0.42f);
     FaceMaterial = MakeMaterial(bEnemyVisual ? FLinearColor(0.74f, 0.67f, 0.49f) : FLinearColor(0.7f, 0.55f, 0.37f), 0.08f, 0.7f);
@@ -156,6 +171,7 @@ void UAlphaCharacterVisualComponent::RefreshAppearance(int32 Hero, bool bEnemy, 
     }
     BuildSilhouette();
     BuildWeapon();
+    if (Enemy && !bBossVisual) BuildEnemyTell();
     if (!bEnemyVisual) BuildAnimeDetails();
     SkillStartedAt = -1000.0;
     AttackStartedAt = -1000.0;
@@ -168,7 +184,7 @@ void UAlphaCharacterVisualComponent::RefreshAppearance(int32 Hero, bool bEnemy, 
 void UAlphaCharacterVisualComponent::BuildSilhouette()
 {
     // Ten-part humanoid core; details are batched separately rather than one component per hair strand.
-    const bool bArmored = bEnemyVisual || HeroType == 0;
+    const bool bArmored = bBossVisual || (bEnemyVisual ? EnemyRole == 1 : HeroType == 0);
     AddPart(EAlphaPrimitive::Cube, BodyRoot, FVector(0, 0, 12), FVector(bArmored ? 42 : 33, 38, 53), ClothMaterial);
     AddPart(EAlphaPrimitive::Cube, BodyRoot, FVector(0, 0, -22), FVector(29, 32, 18), MetalMaterial);
     AddPart(EAlphaPrimitive::Sphere, BodyRoot, FVector(0, 0, 63), FVector(29, 28, 32), bEnemyVisual ? MetalMaterial : FaceMaterial);
@@ -187,7 +203,7 @@ void UAlphaCharacterVisualComponent::BuildSilhouette()
         AddPart(EAlphaPrimitive::Cube, Leg, FVector(9, 0, -49), FVector(30, 21, 12), MetalMaterial);
     }
 
-    if (bEnemyVisual)
+    if (bBossVisual)
     {
         AddPart(EAlphaPrimitive::Cube, BodyRoot, FVector(0, -34, 35), FVector(bBossVisual ? 42 : 27, 24, 23), MetalMaterial, FRotator(0, 0, -15));
         AddPart(EAlphaPrimitive::Cube, BodyRoot, FVector(0, 34, 35), FVector(bBossVisual ? 42 : 27, 24, 23), MetalMaterial, FRotator(0, 0, 15));
@@ -197,6 +213,28 @@ void UAlphaCharacterVisualComponent::BuildSilhouette()
         AddPart(EAlphaPrimitive::Cylinder, BodyRoot, FVector(-29, -14, 49), FVector(11, 11, bBossVisual ? 46 : 27), MetalMaterial);
         AddPart(EAlphaPrimitive::Cube, BodyRoot, FVector(17, 0, 66), FVector(3, 20, 4), GlowMaterial);
         if (bBossVisual) AddPart(EAlphaPrimitive::Cylinder, BodyRoot, FVector(-29, 14, 49), FVector(11, 11, 46), MetalMaterial);
+    }
+    else if (bEnemyVisual && EnemyRole == 1)
+    {
+        AddPart(EAlphaPrimitive::Cube, BodyRoot, FVector(0, -36, 36), FVector(38, 28, 29), MetalMaterial, FRotator(0, 0, -12));
+        AddPart(EAlphaPrimitive::Cube, BodyRoot, FVector(0, 36, 36), FVector(38, 28, 29), MetalMaterial, FRotator(0, 0, 12));
+        AddPart(EAlphaPrimitive::Cube, BodyRoot, FVector(23, 0, 15), FVector(9, 35, 40), AccentMaterial);
+        ShieldMaterial = MakeMaterial(FLinearColor(.8f, .36f, .09f), .15f, .6f);
+        ShieldFace = AddPart(EAlphaPrimitive::Cube, BodyRoot, FVector(34, -20, 0), FVector(13, 65, 85), ShieldMaterial);
+        AddPart(EAlphaPrimitive::Cube, ShieldFace, FVector(55, 0, 0), FVector(8, 12, 74), MetalMaterial);
+    }
+    else if (bEnemyVisual && EnemyRole == 2)
+    {
+        AddPart(EAlphaPrimitive::Cylinder, BodyRoot, FVector(-30, 0, 15), FVector(30, 30, 60), AccentMaterial);
+        AddPart(EAlphaPrimitive::Sphere, BodyRoot, FVector(-31, -17, 14), FVector(21, 8, 28), GlowMaterial);
+        AddPart(EAlphaPrimitive::Cube, BodyRoot, FVector(0, -30, 34), FVector(23, 19, 16), MetalMaterial);
+        AddPart(EAlphaPrimitive::Cube, BodyRoot, FVector(0, 30, 34), FVector(23, 19, 16), MetalMaterial);
+        AddPart(EAlphaPrimitive::Cube, BodyRoot, FVector(18, 0, 66), FVector(4, 24, 7), GlowMaterial);
+    }
+    else if (bEnemyVisual)
+    {
+        AddPart(EAlphaPrimitive::Cube, LeftArm, FVector(0, 0, -20), FVector(17, 19, 12), AccentMaterial);
+        AddPart(EAlphaPrimitive::Cube, RightArm, FVector(0, 0, -20), FVector(17, 19, 12), AccentMaterial);
     }
     else if (HeroType == 0)
     {
@@ -299,7 +337,103 @@ void UAlphaCharacterVisualComponent::ShowGroundImpact(FVector Location, FVector 
     const FVector Facing = Character ? Character->GetCombatComponent()->GetAttackFacing() : GetOwner()->GetActorForwardVector();
     AAlphaCombatEffect::SpawnGroundImpact(GetWorld(), Location, Normal, Facing, Radius,
         BaseTints.IsValidIndex(2) ? BaseTints[2] : FLinearColor::White);
+    AlphaAudio::Play(GetWorld(), Location, EAlphaSoundCue::Poise, .65f);
     AAlphaCombatCamera::KickAt(GetWorld(), Location, .8f);
+}
+
+void UAlphaCharacterVisualComponent::PausePoseForImpact(float Seconds)
+{
+    if (!GetWorld() || !FMath::IsFinite(Seconds) || bDefeatedVisual) return;
+    PosePausedUntil = FMath::Max(PosePausedUntil, VisualTime() + FMath::Clamp(Seconds, 0.f, .1f));
+    UpdateTickBudget();
+}
+
+void UAlphaCharacterVisualComponent::BuildEnemyTell()
+{
+    if (EnemyRole != 2 || !GetOwner() || GetWorld()->GetNetMode() == NM_DedicatedServer) return;
+    EnemyTell = NewObject<UInstancedStaticMeshComponent>(GetOwner());
+    GetOwner()->AddInstanceComponent(EnemyTell);
+    EnemyTell->SetupAttachment(GetOwner()->GetRootComponent());
+    EnemyTell->SetMobility(EComponentMobility::Movable);
+    EnemyTell->SetStaticMesh(AlphaArt::Mesh(EAlphaPrimitive::Cube));
+    EnemyTellMaterial = AlphaArt::EffectMaterial(this, FLinearColor(1.f, .3f, .035f), .35f);
+    EnemyTell->SetMaterial(0, EnemyTellMaterial);
+    EnemyTell->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    EnemyTell->SetGenerateOverlapEvents(false);
+    EnemyTell->SetCanEverAffectNavigation(false);
+    EnemyTell->SetCastShadow(false);
+    EnemyTell->SetReceivesDecals(false);
+    EnemyTell->RegisterComponent();
+    for (int32 Index = 0; Index < 8; ++Index)
+        EnemyTell->AddInstance(FTransform(FQuat::Identity, FVector::ZeroVector, FVector::ZeroVector));
+    EnemyTell->SetVisibility(false);
+    Parts.Add(EnemyTell);
+}
+
+void UAlphaCharacterVisualComponent::UpdateEnemyPresentation()
+{
+    const AAlphaEnemy* Enemy = Cast<AAlphaEnemy>(GetOwner());
+    if (!Enemy || bBossVisual) return;
+    bShieldGuarding = EnemyRole == 1 && Enemy->IsGuardActive();
+    const int32 ShotRevision = Enemy->GetShotRevision();
+    if (bObservedEnemyShotRevision && ShotRevision != LastEnemyShotRevision && EnemyRole == 2)
+    {
+        EnemyShotVisibleUntil = VisualTime() + .10;
+        const FVector Muzzle = WeaponRoot ? WeaponRoot->GetComponentLocation() + WeaponRoot->GetForwardVector()*125.
+            : GetOwner()->GetActorLocation();
+        AAlphaCombatEffect::Spawn(GetWorld(), Muzzle, Enemy->GetTellDirection(), EAlphaEffectType::Hit, FLinearColor(1.f,.55f,.08f));
+        AlphaAudio::Play(GetWorld(), Muzzle, EAlphaSoundCue::Skill, .55f);
+    }
+    LastEnemyShotRevision = ShotRevision;
+    bObservedEnemyShotRevision = true;
+    const bool bWindup = EnemyRole == 2 && Enemy->GetTellState() == EAlphaEnemyTellState::Windup;
+    bEnemyWindingUp = bWindup;
+    EnemyTellProgress = bWindup ? FMath::Clamp(Enemy->GetTellProgress(), 0.f, 1.f) : 0.f;
+    if (!EnemyTell) return;
+    const bool bShot = VisualTime() < EnemyShotVisibleUntil;
+    EnemyTell->SetVisibility((bWindup || bShot) && !bDefeatedVisual);
+    if (!bWindup && !bShot) return;
+    FVector Start = Enemy->GetTellOrigin();
+    FVector Forward = Enemy->GetTellDirection().GetSafeNormal2D();
+    if (Forward.IsNearlyZero()) Forward = FVector::ForwardVector;
+    const FVector Side(-Forward.Y, Forward.X, 0);
+    float Length = 760.f;
+    constexpr float HalfWidth = 48.f;
+    const AAlphaGameState* State = GetWorld()->GetGameState<AAlphaGameState>();
+    const int32 Chapter = State ? State->ChapterIndex : 0;
+    const FVector ChapterOrigin = AAlphaGameState::GetChapterOrigin(Chapter);
+    // Damage rejects paths across missing floor; stop the visible lane there too.
+    for (float Distance = 16.f; Distance <= 760.f; Distance += 16.f)
+    {
+        const FVector Sample = Start + Forward*Distance - ChapterOrigin;
+        if (!AlphaLayoutRules::IsWalkable(Chapter,{Sample.X,Sample.Y})) { Length=FMath::Max(1.f,Distance-16.f); break; }
+        Start.Z = FMath::Max(Start.Z, ChapterOrigin.Z + AlphaLayoutRules::SurfaceHeight(Chapter,{Sample.X,Sample.Y}) + 8.);
+    }
+    const float Progress = bShot ? 1.f : EnemyTellProgress;
+    const auto Beam = [this](int32 Index, const FVector& A, const FVector& B, float Width)
+    {
+        const FVector Delta = B - A;
+        EnemyTell->UpdateInstanceTransform(Index,
+            FTransform(Delta.Rotation(), (A+B)*.5, FVector(Delta.Size()/100., Width/100., .025)),
+            true, Index == 7, true);
+    };
+    Beam(0, Start-Side*HalfWidth, Start+Forward*Length-Side*HalfWidth, 4.f);
+    Beam(1, Start+Side*HalfWidth, Start+Forward*Length+Side*HalfWidth, 4.f);
+    Beam(2, Start-Side*HalfWidth, Start+Side*HalfWidth, 4.f);
+    Beam(3, Start+Forward*Length-Side*HalfWidth, Start+Forward*Length+Side*HalfWidth, 4.f);
+    Beam(4, Start, Start+Forward*FMath::Max(1.f,Length*Progress), bShot ? 8.f : 3.f);
+    const FVector Tip=Start+Forward*(Length*.7f);
+    Beam(5, Tip-Forward*30-Side*18, Tip, 4.f);
+    Beam(6, Tip-Forward*30+Side*18, Tip, 4.f);
+    Beam(7, Start-Side*12, Start+Side*12, 7.f);
+    if (EnemyTellMaterial)
+    {
+        const FLinearColor Color=bShot ? FLinearColor(1.f,.85f,.45f)
+            : FMath::Lerp(FLinearColor(1.f,.28f,.035f),FLinearColor(1.f,.72f,.12f),EnemyTellProgress);
+        EnemyTellMaterial->SetVectorParameterValue(TEXT("Tint"),Color);
+        EnemyTellMaterial->SetVectorParameterValue(TEXT("Color"),Color);
+        EnemyTellMaterial->SetScalarParameterValue(TEXT("Glow"),bShot ? 1.f : .25f+EnemyTellProgress*.4f);
+    }
 }
 
 void UAlphaCharacterVisualComponent::BuildWeapon()
@@ -308,6 +442,13 @@ void UAlphaCharacterVisualComponent::BuildWeapon()
     {
         AddPart(EAlphaPrimitive::Cylinder, WeaponRoot, FVector(45, 0, 0), FVector(9, 9, 115), MetalMaterial, FRotator(90, 0, 0));
         AddPart(EAlphaPrimitive::Cube, WeaponRoot, FVector(95, 0, 0), FVector(40, 66, 54), AccentMaterial);
+    }
+    else if (bEnemyVisual && EnemyRole == 2)
+    {
+        AddPart(EAlphaPrimitive::Cylinder, WeaponRoot, FVector(48, 0, 0), FVector(9, 9, 125), MetalMaterial, FRotator(90, 0, 0));
+        AddPart(EAlphaPrimitive::Cube, WeaponRoot, FVector(112, 0, 0), FVector(23, 19, 19), AccentMaterial);
+        AddPart(EAlphaPrimitive::Sphere, WeaponRoot, FVector(125, 0, 0), FVector(9, 13, 13), GlowMaterial);
+        AddPart(EAlphaPrimitive::Cube, WeaponRoot, FVector(-8, 0, -8), FVector(27, 15, 22), ClothMaterial);
     }
     else if (bEnemyVisual)
     {
@@ -343,6 +484,8 @@ void UAlphaCharacterVisualComponent::SetDefeated(bool bNewDefeated)
     HitUntil = PoiseUntil = -1000.0;
     bAttackCueSpawned = true;
     bBossWindup = false;
+    PosePausedUntil = -1000.;
+    if (EnemyTell) EnemyTell->SetVisibility(false);
     if (WeaponRoot)
     {
         WeaponRoot->SetVisibility(!bDefeatedVisual, true);
@@ -467,6 +610,7 @@ void UAlphaCharacterVisualComponent::PlayHit(float Damage)
     CancelAttackPresentation();
     HitUntil = VisualTime() + 0.16;
     ApplyMaterialState(1.0f, 0.0f);
+    PausePoseForImpact(.04f);
     UpdateTickBudget();
 }
 
@@ -476,6 +620,7 @@ void UAlphaCharacterVisualComponent::PlayPoiseBreak()
     CancelAttackPresentation();
     PoiseUntil = VisualTime() + 0.4;
     ApplyMaterialState(0.0f, 1.0f);
+    PausePoseForImpact(.07f);
     UpdateTickBudget();
 }
 
@@ -524,10 +669,11 @@ void UAlphaCharacterVisualComponent::UpdateTickBudget()
         DistanceSquared = FVector::DistSquared(ViewLocation, GetOwner()->GetActorLocation());
     }
     // The low-rate timer wakes this component when a remote/off-screen character comes back into view.
-    const bool bNear = DistanceSquared < FMath::Square(6000.0f);
+    const bool bNear = DistanceSquared < FMath::Square(8500.0f);
     SetComponentTickEnabled(bNear && !bDefeatedVisual);
-    // The normal co-op camera can sit ~4,100 cm away; keep the entire arena at full visual rate.
-    SetComponentTickInterval(DistanceSquared > FMath::Square(4500.0f) ? 0.066f : 0.0f);
+    // Route framing can pull the camera to 5200cm plus height/side offsets.
+    // Keep visible actors and danger tells updating across that envelope.
+    SetComponentTickInterval(DistanceSquared > FMath::Square(7000.0f) ? 0.066f : 0.0f);
 }
 
 void UAlphaCharacterVisualComponent::ApplyMaterialState(float HitFlash, float PoiseFlash)
@@ -560,6 +706,9 @@ void UAlphaCharacterVisualComponent::TickComponent(float DeltaTime, ELevelTick T
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
     if (!BodyRoot || !WeaponRoot || !GetOwner() || bDefeatedVisual) return;
     const double Now = VisualTime();
+    // Danger tells remain current even while a cosmetic limb pose is held.
+    UpdateEnemyPresentation();
+    if (Now < PosePausedUntil) return;
     const AAlphaCharacter* Hero = Cast<AAlphaCharacter>(GetOwner());
     const bool bRunning = Hero && Hero->IsSprinting() && Hero->GetCharacterMovement()->IsMovingOnGround();
     const float Speed = FMath::Clamp(GetOwner()->GetVelocity().Size2D() / 500.0f, 0.0f, 1.0f);
@@ -619,6 +768,12 @@ void UAlphaCharacterVisualComponent::TickComponent(float DeltaTime, ELevelTick T
         WeaponRoot->SetRelativeRotation(FRotator(-95.0f * Raise, BossAttackType == 1 ? -50.0f * Raise : 0.0f, 0));
         WeaponRoot->SetRelativeLocation(FVector(0, 0, Raise * 35.0f));
     }
+    else if (bEnemyWindingUp)
+    {
+        WeaponRoot->SetRelativeRotation(FRotator(-8.f * EnemyTellProgress, 0, 0));
+        WeaponRoot->SetRelativeLocation(FVector(-12.f * EnemyTellProgress, 0, 10));
+        if (RightArm) RightArm->SetRelativeRotation(FRotator(-65, 0, 0));
+    }
     else if (ComboStage > 0 && AttackTime >= 0.f && AttackTime < AttackDuration)
     {
         UpdateComboPose(AttackTime);
@@ -650,6 +805,20 @@ void UAlphaCharacterVisualComponent::TickComponent(float DeltaTime, ELevelTick T
     {
         WeaponRoot->SetRelativeRotation(FRotator(0, 0, Wave * Speed * 3.0f));
         WeaponRoot->SetRelativeLocation(FVector::ZeroVector);
+        if (bShieldGuarding && LeftArm) LeftArm->SetRelativeRotation(FRotator(-35, 0, -15));
     }
     ApplyMaterialState(HitFlash, PoiseFlash);
+    if (ShieldFace)
+    {
+        ShieldFace->SetRelativeLocation(bShieldGuarding ? FVector(34,-20,0) : FVector(5,-38,-12));
+        ShieldFace->SetRelativeRotation(bShieldGuarding ? FRotator::ZeroRotator : FRotator(0,65,0));
+        if (ShieldMaterial)
+        {
+            const FLinearColor GuardTint = FMath::Lerp(bShieldGuarding ? FLinearColor(.95f,.5f,.12f)
+                : FLinearColor(.25f,.18f,.12f), FLinearColor::White, HitFlash * .8f);
+            ShieldMaterial->SetVectorParameterValue(TEXT("Tint"),GuardTint);
+            ShieldMaterial->SetVectorParameterValue(TEXT("Color"),GuardTint);
+            ShieldMaterial->SetScalarParameterValue(TEXT("Glow"),bShieldGuarding ? .18f : 0.f);
+        }
+    }
 }

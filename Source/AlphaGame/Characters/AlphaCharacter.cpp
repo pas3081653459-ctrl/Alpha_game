@@ -5,6 +5,8 @@
 #include "Abilities/AlphaAbilityComponent.h"
 #include "Visuals/AlphaCharacterVisualComponent.h"
 #include "Visuals/AlphaCombatEffect.h"
+#include "Visuals/AlphaCombatAudio.h"
+#include "Visuals/AlphaCombatCamera.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/InputComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -432,6 +434,7 @@ void AAlphaCharacter::MulticastRoll_Implementation(FVector Facing)
 {
     SetActorRotation(Facing.GetSafeNormal2D().Rotation());
     VisualComponent->PlayRoll();
+    AlphaAudio::Play(GetWorld(), GetActorLocation(), EAlphaSoundCue::Roll, .6f);
 }
 
 void AAlphaCharacter::HandleDeath()
@@ -479,6 +482,7 @@ void AAlphaCharacter::ShowAttack(bool bHeavy)
     ReviveComponent->CancelRevive();
     // Modular weapon animation is cosmetic; the combat component still owns all attack timing.
     VisualComponent->PlayAttack(bHeavy);
+    AlphaAudio::Play(GetWorld(), GetActorLocation(), EAlphaSoundCue::Slash, .55f);
 }
 
 void AAlphaCharacter::CancelAttackVisuals()
@@ -496,6 +500,7 @@ void AAlphaCharacter::ShowCombo(int32 Stage, bool bAirborne)
     VisualFacingLockedUntil = GetWorld()->GetTimeSeconds()
         + AlphaPlayerControl::GetComboAttack(Stage, bAirborne).Duration;
     VisualComponent->PlayCombo(Stage, bAirborne);
+    AlphaAudio::Play(GetWorld(), GetActorLocation(), EAlphaSoundCue::Slash, Stage == 5 ? .85f : .6f);
 }
 
 void AAlphaCharacter::HandleComboFinished()
@@ -579,6 +584,7 @@ void AAlphaCharacter::ShowPoiseBreak()
 {
     if (bDefeated) return;
     VisualComponent->PlayPoiseBreak();
+    AlphaAudio::Play(GetWorld(), GetActorLocation(), EAlphaSoundCue::Poise, .85f);
     AAlphaCombatEffect::Spawn(GetWorld(), GetActorLocation(), GetActorForwardVector(), EAlphaEffectType::Poise, TeamColor);
     // A visual stagger cue, not a movement stun or network time dilation.
     if (BodyMaterial) BodyMaterial->SetVectorParameterValue(TEXT("Color"), FLinearColor(1.0f, 0.85f, 0.15f));
@@ -591,6 +597,11 @@ void AAlphaCharacter::ShowHit(float ActualDamage, AActor* InstigatorActor)
     if (ActualDamage <= 0.0f) return;
     if (HasAuthority() || IsLocallyControlled()) StopSprint();
     VisualComponent->PlayHit(ActualDamage);
+    AlphaAudio::Play(GetWorld(), GetActorLocation(), EAlphaSoundCue::Hit, .7f);
+    AAlphaCombatCamera::KickAt(GetWorld(), GetActorLocation(), .22f);
+    if (IsValid(InstigatorActor))
+        if (UAlphaCharacterVisualComponent* AttackerVisual = InstigatorActor->FindComponentByClass<UAlphaCharacterVisualComponent>())
+            AttackerVisual->PausePoseForImpact(.04f);
     AAlphaCombatEffect::Spawn(GetWorld(), GetActorLocation(), GetActorForwardVector(), EAlphaEffectType::Hit, FLinearColor(1.0f, 0.65f, 0.3f));
 }
 
