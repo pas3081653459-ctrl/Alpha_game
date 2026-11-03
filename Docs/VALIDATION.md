@@ -80,3 +80,9 @@
 - 新增真实引擎帧latent五段测试，不修改/回退GFrameCounter；空中取消/同次飞行不续空与方向/冲刺测试为独立UE用例。UE测试当前30项全部未执行，包含本轮新增及更新用例。
 
 没有把可移植测试当作Mac/Windows编译或实机手感证据。需要在Mac UE5.6重新构建，随后执行 `PLAYER_CONTROLS.md` 的输入、物理、时序与联网验收。
+
+## Mac 增量编译：受保护 Tick 回调
+
+用户最新 Mac UE5.6 日志确认 UHT 已通过，随后 C++ 报告 `AlphaComboTests.cpp` 直接调用受保护 `UAlphaCombatComponent::TickComponent`。已删除这次冗余手动调用：前面的公开 `ResetVitals()` 已清除本次离地资格锁，测试仍验证同次离地不能续空、公开重置后可重新开始以及受击恢复重力。没有扩大生产接口访问权限、删除断言或修改全局帧计数器。其余测试中的救援组件 Tick 声明为 public，不属于同类错误。
+
+修复后的完整 Mac 构建仍待本机重跑；当前云环境无法执行 Unreal 编译。

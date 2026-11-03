@@ -110,10 +110,11 @@ bool FAlphaAirComboCancellationTest::RunTest(const FString& Parameters)
     TestFalse(TEXT("Another click in the same flight cannot renew hovering"), Combat->IsAirComboActive());
     Combat->ResetVitals();
     Movement->SetMovementMode(MOVE_Walking);
-    Combat->TickComponent(.05f, LEVELTICK_All, nullptr);
+    // ResetVitals already clears the per-flight latch. Exercise the public
+    // reset path without manually invoking a protected engine tick callback.
     Movement->SetMovementMode(MOVE_Falling);
     Combat->TryAttack(false);
-    TestTrue(TEXT("A genuine new jump can have its own hold"), Combat->IsAirComboActive());
+    TestTrue(TEXT("A reset character can start a new air hold"), Combat->IsAirComboActive());
     Combat->ReceiveHit(10.f, 0.f, nullptr);
     TestFalse(TEXT("Damage interrupts air hold"), Combat->IsAirComboActive());
     TestEqual(TEXT("Damage restores gravity"), Movement->GravityScale, OriginalGravity);
