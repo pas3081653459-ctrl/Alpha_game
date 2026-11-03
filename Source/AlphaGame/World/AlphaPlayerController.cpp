@@ -6,6 +6,10 @@
 #include "World/AlphaGameState.h"
 #include "Coop/AlphaReviveComponent.h"
 #include "UI/AlphaLobbyWidget.h"
+#include "UI/AlphaDialogueWidget.h"
+#include "World/AlphaStoryNPC.h"
+#include "EngineUtils.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "Visuals/AlphaCombatCamera.h"
 #include "Components/InputComponent.h"
 #include "Camera/CameraActor.h"
@@ -41,16 +45,19 @@ void AAlphaPlayerController::SetupInputComponent()
 {
     Super::SetupInputComponent();
     InputComponent->BindAction(TEXT("ToggleMenu"), IE_Pressed, this, &AAlphaPlayerController::ToggleLobby);
+    InputComponent->BindAction(TEXT("InteractStory"), IE_Pressed, this, &AAlphaPlayerController::InteractStory);
 }
 
 void AAlphaPlayerController::ToggleLobby()
 {
+    if (DialogueWidget && DialogueWidget->IsVisible()) FinishStoryDialogue(false);
     SetLobbyVisible(!LobbyWidget || !LobbyWidget->IsVisible());
 }
 
 void AAlphaPlayerController::SetLobbyVisible(bool bVisible)
 {
     if (!IsLocalController()) return;
+    if (bVisible && DialogueWidget && DialogueWidget->IsVisible()) FinishStoryDialogue(false);
     if (!LobbyWidget && bVisible)
     {
         LobbyWidget = CreateWidget<UAlphaLobbyWidget>(this, UAlphaLobbyWidget::StaticClass());
@@ -61,10 +68,19 @@ void AAlphaPlayerController::SetLobbyVisible(bool bVisible)
         if (bVisible) LobbyWidget->PrepareForDisplay();
         LobbyWidget->SetVisibility(bVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
     }
+    UpdateUIInputMode();
+}
+
+void AAlphaPlayerController::UpdateUIInputMode()
+{
+    const bool bDialogue = DialogueWidget && DialogueWidget->IsVisible();
+    const bool bVisible = bDialogue || (LobbyWidget && LobbyWidget->IsVisible());
     if (bVisible)
     {
         FInputModeGameAndUI Mode;
         Mode.SetHideCursorDuringCapture(false);
+        if (bDialogue) Mode.SetWidgetToFocus(DialogueWidget->TakeWidget());
+        else if (LobbyWidget) Mode.SetWidgetToFocus(LobbyWidget->TakeWidget());
         SetInputMode(Mode);
     }
     else SetInputMode(FInputModeGameOnly());
@@ -79,8 +95,95 @@ void AAlphaPlayerController::SetLobbyVisible(bool bVisible)
         {
             Character->StopSprint();
             Character->GetReviveComponent()->EndRevive();
+            Character->GetCharacterMovement()->StopMovementImmediately();
         }
     }
+}
+
+void AAlphaPlayerController::ContinueChapter()
+{
+    if (AAlphaGameMode* Mode = GetWorld()->GetAuthGameMode<AAlphaGameMode>())
+    {
+        if (Mode->AdvanceChapter()) SetLobbyVisible(false);
+        else ClientMessage(TEXT("Finish the current chapter conversation before continuing."));
+    }
+    else ClientMessage(TEXT("Only the host can continue to the next chapter."));
+}
+
+void AAlphaPlayerController::InteractStory()
+{
+    if (!IsLocalController() || (LobbyWidget && LobbyWidget->IsVisible())
+        || (DialogueWidget && DialogueWidget->IsVisible())) return;
+    ServerInteractStory();
+}
+
+void AAlphaPlayerController::ServerInteractStory_Implementation()
+{
+    const double Now = GetWorld()->GetTimeSeconds();
+    if (Now - LastStoryRequestAt < .35) return;
+    LastStoryRequestAt = Now;
+    AAlphaCharacter* Character = Cast<AAlphaCharacter>(GetPawn());
+    const AAlphaGameState* State = GetWorld()->GetGameState<AAlphaGameState>();
+    if (!Character || !State || State->StoryStage == EAlphaStoryStage::Combat
+        || State->RoundState == EAlphaRoundState::Defeat) return;
+    for (TActorIterator<AAlphaStoryNPC> It(GetWorld()); It; ++It)
+    {
+        if (It->CanTalk(Character))
+        {
+            ServerStoryChapter = State->ChapterIndex;
+            ServerStoryStage = static_cast<uint8>(State->StoryStage);
+            ServerStoryRevision = State->StoryRevision;
+            Character->GetCombatComponent()->SetActionLockFor(.15f);
+            Character->GetCharacterMovement()->StopMovementImmediately();
+            ClientOpenStoryDialogue(State->ChapterIndex, State->StoryStage == EAlphaStoryStage::Debrief
+                || State->StoryStage == EAlphaStoryStage::Complete, State->StoryRevision);
+            return;
+        }
+    }
+    ClientMessage(TEXT("Move closer to the chapter NPC and leave a clear line of sight."));
+}
+
+void AAlphaPlayerController::ClientOpenStoryDialogue_Implementation(int32 Chapter, bool bDebrief, int32 Revision)
+{
+    if (!IsLocalController()) return;
+    if (!DialogueWidget)
+    {
+        DialogueWidget = CreateWidget<UAlphaDialogueWidget>(this, UAlphaDialogueWidget::StaticClass());
+        if (DialogueWidget) DialogueWidget->AddToViewport(20);
+    }
+    if (!DialogueWidget) return;
+    VisibleStoryChapter = Chapter;
+    if (LobbyWidget) LobbyWidget->SetVisibility(ESlateVisibility::Collapsed);
+    DialogueWidget->OpenChapter(Chapter, bDebrief, Revision);
+    DialogueWidget->SetVisibility(ESlateVisibility::Visible);
+    UpdateUIInputMode();
+    DialogueWidget->SetUserFocus(this);
+}
+
+void AAlphaPlayerController::FinishStoryDialogue(bool bAdvance)
+{
+    if (!IsLocalController() || VisibleStoryChapter < 0) return;
+    ServerFinishStoryDialogue(VisibleStoryChapter, bAdvance);
+    HideStoryDialogue();
+}
+
+void AAlphaPlayerController::HideStoryDialogue()
+{
+    VisibleStoryChapter = -1;
+    if (DialogueWidget) DialogueWidget->SetVisibility(ESlateVisibility::Collapsed);
+    UpdateUIInputMode();
+}
+
+void AAlphaPlayerController::ServerFinishStoryDialogue_Implementation(int32 Chapter, bool bAdvance)
+{
+    const int32 ExpectedChapter = ServerStoryChapter;
+    ServerStoryChapter = -1; // Each authorized conversation can complete only once.
+    const AAlphaGameState* State = GetWorld()->GetGameState<AAlphaGameState>();
+    if (!bAdvance || !State || Chapter != ExpectedChapter || Chapter != State->ChapterIndex
+        || State->StoryRevision != ServerStoryRevision
+        || static_cast<uint8>(State->StoryStage) != ServerStoryStage) return;
+    if (AAlphaGameMode* Mode = GetWorld()->GetAuthGameMode<AAlphaGameMode>())
+        Mode->TalkToStoryNPC(Cast<AAlphaCharacter>(GetPawn()));
 }
 
 void AAlphaPlayerController::StartRun()
@@ -88,7 +191,7 @@ void AAlphaPlayerController::StartRun()
     if (AAlphaGameMode* Mode = GetWorld()->GetAuthGameMode<AAlphaGameMode>())
     {
         if (Mode->StartPrototypeRun()) SetLobbyVisible(false);
-        else ClientMessage(TEXT("Prepare or restart the round before starting."));
+        else ClientMessage(TEXT("Talk to the chapter guide with F and confirm the mission before starting."));
     }
     else ClientMessage(TEXT("Only the host can start the run."));
 }

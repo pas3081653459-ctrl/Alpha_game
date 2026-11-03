@@ -8,6 +8,7 @@
 #include "EngineUtils.h"
 #include "World/AlphaGameState.h"
 #include "World/AlphaGameInstance.h"
+#include "World/AlphaStoryNPC.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
@@ -41,7 +42,9 @@ void AAlphaHUD::DrawHUD()
 
     AAlphaGameState* State = GetWorld()->GetGameState<AAlphaGameState>();
     Card(16, 16, CardWidth, 91);
-    Text(TEXT("ASH TIDE  /  THE FOUNDRY"), Gold, 29, 25, 1.2f);
+    const int32 Chapter = State ? FMath::Clamp(State->ChapterIndex, 0, 2) : 0;
+    static const TCHAR* ChapterNames[] = {TEXT("GREY FERRY"), TEXT("HUNDRED FORGES"), TEXT("LANTERN CANAL")};
+    Text(FString::Printf(TEXT("ASH TIDE / %d: %s"), Chapter + 1, ChapterNames[Chapter]), Gold, 29, 25, 1.1f);
     const TCHAR* Mode = GetNetMode() == NM_Standalone ? TEXT("SOLO") : (GetNetMode() == NM_Client ? TEXT("LAN CLIENT") : TEXT("LAN HOST"));
     Text(FString::Printf(TEXT("%s  |  %d human + %d AI / 3  |  TAB Room"), Mode,
         State ? State->HumanPlayerCount : 0, State ? State->CompanionCount : 0), Muted, 29, 50);
@@ -50,17 +53,40 @@ void AAlphaHUD::DrawHUD()
     {
         switch (State->RoundState)
         {
-        case EAlphaRoundState::Waiting: Objective = TEXT("Choose heroes in TAB. Host starts the run."); break;
+        case EAlphaRoundState::Waiting:
+            Objective = State->StoryStage == EAlphaStoryStage::Ready
+                ? TEXT("Mission accepted. TAB: host starts this chapter.")
+                : TEXT("Find the guide on the LEFT. F: talk / accept mission.");
+            break;
         case EAlphaRoundState::Fighting:
             Objective = State->EncounterStage == EAlphaEncounterStage::Boss ? TEXT("Defeat the Forge Warden. Watch the marked ground.")
-                : FString::Printf(TEXT("WAVE %d / %d   |   %d enemies remaining"), State->Wave, AAlphaGameState::TotalWaves, State->RemainingEnemies);
+                : FString::Printf(TEXT("WAVE %d / %d   |   %d enemies remaining"), State->Wave, State->GetChapterWaveCount(), State->RemainingEnemies);
             break;
         case EAlphaRoundState::Intermission: Objective = TEXT("NEXT ENCOUNTER  /  3 seconds"); break;
-        case EAlphaRoundState::Victory: Objective = TEXT("VICTORY  /  Host can reset in TAB."); break;
+        case EAlphaRoundState::Victory:
+            Objective = State->StoryStage == EAlphaStoryStage::Debrief
+                ? TEXT("Return to the guide on the LEFT. F: report back.")
+                : (Chapter < 2 ? TEXT("Chapter complete. TAB: host continues the journey.")
+                    : TEXT("Journey complete. The city's story continues..."));
+            break;
         case EAlphaRoundState::Defeat: Objective = TEXT("DEFEAT  /  Host can reset in TAB."); break;
         }
     }
     Text(Objective, FLinearColor(.9f, .91f, .85f), 29, 76);
+
+    for (TActorIterator<AAlphaStoryNPC> It(GetWorld()); It; ++It)
+    {
+        if (!State || It->ChapterIndex != State->ChapterIndex) continue;
+        FVector2D Screen;
+        if (!PlayerOwner->ProjectWorldLocationToScreen(It->GetActorLocation() + FVector(0, 0, 205), Screen)) continue;
+        static const TCHAR* GuideNames[] = {TEXT("DU BO / FERRYMAN"), TEXT("SUI / ARCHIVIST"), TEXT("CHENG / LAMP KEEPER")};
+        Text(GuideNames[Chapter], Gold, Screen.X - 65, Screen.Y, .85f);
+        const APawn* Pawn = PlayerOwner->GetPawn();
+        const bool bSafe = State->RoundState == EAlphaRoundState::Waiting || State->RoundState == EAlphaRoundState::Victory;
+        if (Pawn && bSafe && FVector::DistSquared2D(Pawn->GetActorLocation(), It->GetActorLocation())
+            <= FMath::Square(AAlphaStoryNPC::InteractionRadius))
+            Text(TEXT("F  TALK"), FLinearColor(.4f, 1.f, .8f), Screen.X - 28, Screen.Y + 17, .95f);
+    }
 
     if (AAlphaCharacter* Character = Cast<AAlphaCharacter>(PlayerOwner->GetPawn()))
     {

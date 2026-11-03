@@ -107,6 +107,7 @@ bool FAlphaPartyLifecycleTest::RunTest(const FString& Parameters)
     Third->Destroy();
     Mode->RefreshCompanions();
     TestEqual(TEXT("Returning to two humans fills the spare slot"), State->CompanionCount, 1);
+    State->StoryStage = EAlphaStoryStage::Ready; // This fixture tests roster lifecycle after briefing.
     TestTrue(TEXT("Ready party starts an actual run"), Mode->StartPrototypeRun());
     TestEqual(TEXT("Run scaling locks the full party, including AI"), State->EncounterPlayerCount, 3);
     TestFalse(TEXT("Fill cannot be changed during combat"), Mode->SetCompanionFillEnabled(false));
@@ -135,6 +136,7 @@ bool FAlphaPartyLifecycleTest::RunTest(const FString& Parameters)
     Second->Destroy();
     Mode->RefreshCompanions();
     TestEqual(TEXT("One remaining human refills two bots in preparation"), State->CompanionCount, 2);
+    State->StoryStage = EAlphaStoryStage::Ready;
     TestTrue(TEXT("Solo plus bots starts a new run"), Mode->StartPrototypeRun());
     if (APawn* Pawn = First->GetPawn()) Pawn->Destroy();
     Mode->CheckRound();

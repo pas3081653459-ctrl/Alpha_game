@@ -23,6 +23,16 @@ enum class EAlphaEncounterStage : uint8
     Finished
 };
 
+UENUM(BlueprintType)
+enum class EAlphaStoryStage : uint8
+{
+    Arrival,
+    Ready,
+    Combat,
+    Debrief,
+    Complete
+};
+
 class AAlphaForgeBoss;
 
 UCLASS()
@@ -32,6 +42,17 @@ class ALPHAGAME_API AAlphaGameState : public AGameStateBase
 public:
     virtual void BeginPlay() override;
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Story")
+    int32 ChapterIndex = 0;
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Story")
+    EAlphaStoryStage StoryStage = EAlphaStoryStage::Arrival;
+    /** Invalidates conversations across retries of the same chapter. */
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Story")
+    int32 StoryRevision = 0;
+    static FVector GetChapterOrigin(int32 Chapter);
+    int32 GetChapterWaveCount() const;
+    bool ChapterHasBoss() const;
 
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Round")
     int32 Wave = 0;

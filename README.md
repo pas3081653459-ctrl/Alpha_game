@@ -18,7 +18,9 @@ Windows 三人局域网 2.5D 合作动作闯关项目，使用 **Unreal Engine 5
 - 能量初始 0：U 成功 +10，I 成功消耗 10，O 满 100 才可释放并消耗 100；普攻命中不加能量。
 - 合作跟进仍可增加敌人架势伤害，但不再产生能量或自动强化普通技能。
 - 持续按住 E 救援：距离、视线和独占目标检查；离距、受击、松手、死亡与断线中断；完成恢复 40% 生命。
-- 准备选角 → 房主开局 → 三波敌人 → 双阶段铸炉 Boss → 胜败 → 重开。
+- 中文启动菜单、三职业卡、当前章节目标、折叠局域网入口与就近错误提示。
+- 三章路线：灰渡码头（2波）→ 百炉工坊（3波＋双阶段铸炉官）→ 悬灯水道（2波）。
+- 渡伯、穗、澄三名固定NPC，战前/战后共18页中文对话；F交谈，读完确认后解锁战斗或下一章。
 - Boss 扇形横扫、直线炉火、落点重锤；基础网格地面预警与蓄力变色。
 - 代码式 UMG 房间面板：创建、输入 IP 加入、选角、开局和重开；Tab 开关。
 - 三人房主制、网络错误提示和返回本地准备场；控制台备用入口。
@@ -32,7 +34,7 @@ Windows 三人局域网 2.5D 合作动作闯关项目，使用 **Unreal Engine 5
 默认开启 **AI teammates**，一名真人补两名 AI、两名真人补一名 AI，三名真人不补位。AI 不占真人连接席位，并优先选择缺少的职业。
 
 1. 完成下方 Unreal 构建后，启动一个独立游戏窗口即可，不需要创建局域网房间或再开客户端。
-2. 在 Tab 房间面板确认 **AI teammates: ON**，选择职业，点击 **Start run**。
+2. 在 Tab 房间面板确认 **AI teammates: ON**，选择职业，先关闭菜单，走到左侧NPC身边按 **F**，读完并确认任务；再按Tab点击“开始本章战斗”。
 3. AI 会跟随、选择敌人、使用普通攻击和技能、尝试避开 Boss 预警，并救援倒地队友。头顶显示 AI 和当前行为。
 4. Development 构建中，可在开局后输入控制台命令 `TestDownSelf` 测试 AI 救援。保护状态下需要等待后重试；该命令在 Shipping 不生效。
 5. 需要纯单人对比时，重置回准备阶段，点击关闭补位，或执行 `SetBotFill 0`；`SetBotFill 1` 再次开启。
@@ -78,11 +80,14 @@ Mac 上也可用 UE5.6 编辑器 Python 执行同一个 `Scripts/create_art_asse
 
 ## 单人或三人局域网流程
 
-1. 启动后显示房间面板。单人可以直接选角并开始；联机房主先点 **Create LAN room**，这会重新加载准备场。
-2. 房主确认本机局域网 IPv4，允许应用通过 Windows 专用网络防火墙；默认游戏端口为 UDP 7777。
-3. 两名客户端填入房主 IP，例如 `192.168.1.10:7777`，点击 **Join address**。面板中不预填地址，以免把示例当成真实房主。
-4. 各人选择职业；房主点击 **Start run**。客户端初次准备面板随开局关闭，之后可按 Tab 打开。
-5. 消灭三波敌人和 Boss，或全队倒地失败；房主在面板中重置回准备阶段，再次开局。
+1. 启动后显示中文菜单，选择职业。单人默认补齐AI；联机房主展开“局域网联机”并创建房间（会重新载入场景）。
+2. 两名客户端输入房主IPv4，例如 `192.168.1.10:7777`，点击加入；允许应用通过专用网络防火墙，默认UDP7777。
+3. 选择“进入场景”，走到左侧固定NPC附近，按 **F** 逐页交谈，读完选择确认。Esc退出不推进；对话不暂停联机世界。
+4. 房主/单人按Tab，点击“开始本章战斗”。任何真人都可完成当前章节交谈；只有房主开战和推进地图。
+5. 清完本章敌人（工坊还需打败铸炉官），返回NPC按F听取战后线索并确认，房主再从菜单点击“前往下一章”。
+6. 全队迁移到独立地区，镜头与AI跟随新坐标；第三章交谈后收束本次路线。重开保留当前章，重新交谈接任务。
+
+三章均为程序化平坦遭遇区域，非三张正式手工地图或无缝探索大世界。固定NPC提供剧情门槛，不具备配音、分支任务、存档、实际护送/灯阵解谜或复杂行程。设计与验收见 [三章地图与剧情](Docs/CHAPTER_DESIGN.md)。
 
 战斗和间歇期间拒绝新加入，包括掉线重连。玩家需要等到准备或结算阶段再加入。人数缩放固定在开局，掉线不会让 Boss 回血。未实现房间自动发现、房主迁移或战斗状态恢复。
 
@@ -97,11 +102,12 @@ Mac 上也可用 UE5.6 编辑器 Python 执行同一个 `Scripts/create_art_asse
 | 小技能：消耗 10 能量 | I | 右扳机 |
 | 终极：满能量消耗 100 | O | 左扳机 |
 | 救援 | 持续按 E | 持续按左肩 |
-| 房间面板 | Tab | Start |
+| NPC交谈 | F | 当前为键盘/鼠标入口 |
+| 启动/房间面板 | Tab | Start |
 
 面板目前以鼠标操作为主，完整手柄焦点导航与中文 UI 字体待补。W/S 同样会改变面向，斜向输入归一化；每段攻击动作期间保持该段起手朝向，避免武器画面与判定分离。完整规则见 [新操作说明](Docs/PLAYER_CONTROLS.md)。
 
-控制台 `~` 备用命令：`HostGame`、`JoinGame 192.168.1.10:7777`、`SelectHero 0`（可选 0/1/2）、`StartRun`、`RestartRound`。`CameraShakeStrength 0` 可关闭镜头震动，范围 0～1。职业切换仅允许准备或结算；开始与重开仅房主/单人可执行。
+控制台 `~` 备用命令：`HostGame`、`JoinGame 192.168.1.10:7777`、`SelectHero 0`（可选 0/1/2）、`StartRun`（需先确认NPC任务）、`ContinueChapter`、`InteractStory`、`RestartRound`。`CameraShakeStrength 0` 可关闭镜头震动，范围 0～1。职业切换仅允许准备或结算；开始与重开仅房主/单人可执行。
 
 ## 验证与打包
 
@@ -117,6 +123,8 @@ python3 Scripts/run_companion_tests.py
 python3 Scripts/run_companion_tests.py --sanitize
 python3 Scripts/run_player_control_tests.py
 python3 Scripts/run_player_control_tests.py --sanitize
+python3 Scripts/run_story_tests.py
+python3 Scripts/run_story_tests.py --sanitize
 ```
 
 - 工程一致性检查通过。
@@ -131,9 +139,9 @@ Windows 引擎环境执行 UE 自动化与打包：
 .\Scripts\Build-Windows.ps1 -EngineRoot 'C:\Program Files\Epic Games\UE_5.6' -Action Package
 ```
 
-目前有 **35 项 UE Automation 测试源码**，覆盖战斗、连招、空中取消、方向/奔跑、救援、能量、Boss、AI 同伴和队伍生命周期。脚本从源码提取完整测试名，要求本次报告中逐项成功，拒绝零测试、漏项、失败或未完成。报告位于 `Artifacts/Tests/`，Development 包位于 `Artifacts/Windows/`。
+目前有 **37 项 UE Automation 测试源码**，覆盖战斗、连招、空中取消、方向/奔跑、救援、能量、Boss、AI 同伴和队伍生命周期。脚本从源码提取完整测试名，要求本次报告中逐项成功，拒绝零测试、漏项、失败或未完成。报告位于 `Artifacts/Tests/`，Development 包位于 `Artifacts/Windows/`。
 
-**Unreal 编译、这 35 项 UE 测试、PowerShell、渲染、打包和三台 Windows 设备联机均未执行。**当前 Linux 云机器没有 Unreal Editor/UnrealBuildTool，测试结果不能替代这些门槛。
+**Unreal 编译、这 37 项 UE 测试、PowerShell、渲染、打包和三台 Windows 设备联机均未执行。**当前 Linux 云机器没有 Unreal Editor/UnrealBuildTool，测试结果不能替代这些门槛。
 
 ## 已知范围
 
@@ -147,6 +155,8 @@ Windows 引擎环境执行 UE 自动化与打包：
 - [源码阶段交付](Docs/M1_PROGRESS.md)
 - [验收步骤](Docs/ACCEPTANCE.md)
 - [验证证据与阻塞](Docs/VALIDATION.md)
+
+本轮新增剧情规则499项普通与UBSan通过，五套总2977项；37项UE测试仅源码、未执行。中文字体、小窗口布局、三章迁移及真实联机仍需UE验收。
 
 按路线自动推进独立开发工作；Windows 编译和真实局域网是下一道外部验收门槛。各云任务使用现有隔离目录，无需额外创建 Git worktree。
 

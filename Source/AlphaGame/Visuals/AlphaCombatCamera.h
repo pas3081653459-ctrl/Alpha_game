@@ -25,4 +25,5 @@ private:
     float LastHealth = -1.f;
     TWeakObjectPtr<APawn> LastPawn;
     bool bInitialized = false;
+    int32 LastChapter = -1;
 };

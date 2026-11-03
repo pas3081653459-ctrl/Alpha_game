@@ -1,6 +1,8 @@
 #include "World/AlphaGameMode.h"
 #include "World/AlphaGameState.h"
 #include "World/AlphaBreakableProp.h"
+#include "World/AlphaStoryNPC.h"
+#include "Rules/StoryRules.h"
 #include "World/AlphaPlayerController.h"
 #include "Characters/AlphaCharacter.h"
 #include "Characters/AlphaEnemy.h"
@@ -89,6 +91,7 @@ void AAlphaGameMode::Logout(AController* Exiting)
             State->HumanPlayerCount = 0;
             State->CompanionCount = 0;
             State->RoundState = EAlphaRoundState::Waiting;
+            State->StoryStage = EAlphaStoryStage::Arrival;
             State->EncounterStage = EAlphaEncounterStage::Preparation;
         }
     }
@@ -184,6 +187,17 @@ void AAlphaGameMode::RefreshCompanions()
     const bool bTerminal = State->RoundState == EAlphaRoundState::Victory || State->RoundState == EAlphaRoundState::Defeat;
     if (!bWaiting && !bTerminal) return; // Active encounter population is locked.
     const TArray<APlayerController*> Humans = HumanControllers();
+    const FVector ChapterOrigin = AAlphaGameState::GetChapterOrigin(State->ChapterIndex);
+    // A late-joining pawn can be possessed after PostLogin, and Entry's initial
+    // PlayerStart may still be used. Correct its chapter before admission ends.
+    for (APlayerController* Human : Humans)
+    {
+        if (AAlphaCharacter* Character = Cast<AAlphaCharacter>(Human->GetPawn()))
+        {
+            if (FMath::Abs(Character->GetActorLocation().X - ChapterOrigin.X) > 1500.f)
+                Character->TeleportTo(ChapterOrigin + FVector(-650, -100, 110), FRotator::ZeroRotator, false, true);
+        }
+    }
     const int32 Desired = AlphaCompanionRules::MissingCompanions(Humans.Num(), bCompanionFillEnabled);
     TArray<AAlphaCompanion*> Bots = CompanionActors();
     while (Bots.Num() > Desired)
@@ -214,7 +228,7 @@ void AAlphaGameMode::RefreshCompanions()
         FActorSpawnParameters Params;
         Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
         AAlphaCompanion* Bot = GetWorld()->SpawnActor<AAlphaCompanion>(AAlphaCompanion::StaticClass(),
-            FVector(-650 + Slot * 180, -100 + Slot * 100, 110), FRotator::ZeroRotator, Params);
+            AAlphaGameState::GetChapterOrigin(State->ChapterIndex) + FVector(-650 + Slot * 180, -100 + Slot * 100, 110), FRotator::ZeroRotator, Params);
         if (!Bot)
         {
             UE_LOG(LogTemp, Warning, TEXT("AlphaGame: companion fill incomplete; spawn failed."));
@@ -235,7 +249,8 @@ void AAlphaGameMode::RefreshCompanions()
 bool AAlphaGameMode::StartPrototypeRun()
 {
     AAlphaGameState* State = GetGameState<AAlphaGameState>();
-    if (!HasAuthority() || !State || State->RoundState != EAlphaRoundState::Waiting) return false;
+    if (!HasAuthority() || !State || !AlphaStoryRules::CanStart(State->ChapterIndex,
+        static_cast<AlphaStoryRules::Stage>(State->StoryStage), State->RoundState == EAlphaRoundState::Waiting)) return false;
     RefreshCompanions();
     const TArray<APlayerController*> Humans = HumanControllers();
     const TArray<AAlphaCompanion*> Bots = CompanionActors();
@@ -254,6 +269,7 @@ bool AAlphaGameMode::StartPrototypeRun()
     RunPlayerCount = Humans.Num() + Bots.Num();
     State->EncounterPlayerCount = RunPlayerCount;
     State->EncounterStage = EAlphaEncounterStage::Waves;
+    State->StoryStage = EAlphaStoryStage::Combat;
     EnsureRoundMonitor();
     StartNextWave();
     return State->RoundState == EAlphaRoundState::Fighting;
@@ -293,7 +309,7 @@ void AAlphaGameMode::StartNextWave()
     AAlphaGameState* State = GetGameState<AAlphaGameState>();
     if (!State || HumanControllers().IsEmpty()) return;
     if (State->RoundState != EAlphaRoundState::Waiting && State->RoundState != EAlphaRoundState::Intermission) return;
-    if (State->EncounterStage != EAlphaEncounterStage::Waves || State->Wave >= AAlphaGameState::TotalWaves) return;
+    if (State->EncounterStage != EAlphaEncounterStage::Waves || State->Wave >= State->GetChapterWaveCount()) return;
     State->Wave++;
     State->RoundState = EAlphaRoundState::Fighting;
     WaveEnemies.Reset();
@@ -302,7 +318,8 @@ void AAlphaGameMode::StartNextWave()
     {
         FActorSpawnParameters Params;
         Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-        const FVector Location(650.f + (Index % 2) * 180.f, -240.f + (Index % 4) * 150.f, 110.f);
+        const FVector Location = AAlphaGameState::GetChapterOrigin(State->ChapterIndex)
+            + FVector(650.f + (Index % 2) * 180.f, -240.f + (Index % 4) * 150.f, 110.f);
         AAlphaEnemy* Enemy = GetWorld()->SpawnActor<AAlphaEnemy>(AAlphaEnemy::StaticClass(), Location, FRotator(0, 180, 0), Params);
         if (Enemy) WaveEnemies.Add(Enemy);
     }
@@ -319,10 +336,10 @@ void AAlphaGameMode::StartBossEncounter()
 {
     AAlphaGameState* State = GetGameState<AAlphaGameState>();
     if (!State || HumanControllers().IsEmpty() || State->RoundState != EAlphaRoundState::Intermission) return;
-    if (State->EncounterStage != EAlphaEncounterStage::Boss) return;
+    if (State->EncounterStage != EAlphaEncounterStage::Boss || !State->ChapterHasBoss()) return;
     FActorSpawnParameters Params;
     Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-    AAlphaForgeBoss* Boss = GetWorld()->SpawnActor<AAlphaForgeBoss>(AAlphaForgeBoss::StaticClass(), FVector(800, 0, 150), FRotator(0, 180, 0), Params);
+    AAlphaForgeBoss* Boss = GetWorld()->SpawnActor<AAlphaForgeBoss>(AAlphaForgeBoss::StaticClass(), AAlphaGameState::GetChapterOrigin(State->ChapterIndex) + FVector(800, 0, 150), FRotator(0, 180, 0), Params);
     if (!Boss)
     {
         MarkDefeat();
@@ -382,9 +399,7 @@ void AAlphaGameMode::CheckRound()
         State->BossPhase = State->ForgeBoss->GetBossPhase();
         if (!State->ForgeBoss->GetCombatComponent()->IsAlive())
         {
-            State->RemainingEnemies = 0;
-            State->RoundState = EAlphaRoundState::Victory;
-            State->EncounterStage = EAlphaEncounterStage::Finished;
+            MarkChapterVictory();
         }
         return;
     }
@@ -397,10 +412,14 @@ void AAlphaGameMode::CheckRound()
     if (LivingEnemies == 0 && State->RoundState == EAlphaRoundState::Fighting)
     {
         State->RoundState = EAlphaRoundState::Intermission;
-        if (State->Wave >= AAlphaGameState::TotalWaves)
+        if (State->Wave >= State->GetChapterWaveCount())
         {
-            State->EncounterStage = EAlphaEncounterStage::Boss;
-            GetWorldTimerManager().SetTimer(WaveTimer, this, &AAlphaGameMode::StartBossEncounter, 3.f, false);
+            if (State->ChapterHasBoss())
+            {
+                State->EncounterStage = EAlphaEncounterStage::Boss;
+                GetWorldTimerManager().SetTimer(WaveTimer, this, &AAlphaGameMode::StartBossEncounter, 3.f, false);
+            }
+            else MarkChapterVictory();
         }
         else
         {
@@ -412,6 +431,8 @@ void AAlphaGameMode::CheckRound()
 void AAlphaGameMode::RestartPrototypeRound()
 {
     if (!HasAuthority()) return;
+    const AAlphaGameState* CurrentState = GetGameState<AAlphaGameState>();
+    const FVector ChapterOrigin = AAlphaGameState::GetChapterOrigin(CurrentState ? CurrentState->ChapterIndex : 0);
     GetWorldTimerManager().ClearTimer(WaveTimer);
     ClearEncounterActors();
     for (TActorIterator<AAlphaBreakableProp> It(GetWorld()); It; ++It) It->ResetForRound();
@@ -420,9 +441,17 @@ void AAlphaGameMode::RestartPrototypeRound()
         State->Wave = 0;
         State->RemainingEnemies = 0;
         State->RoundState = EAlphaRoundState::Waiting;
+        State->StoryRevision = State->StoryRevision == MAX_int32 ? 0 : State->StoryRevision + 1;
+        State->StoryStage = EAlphaStoryStage::Arrival;
         State->EncounterStage = EAlphaEncounterStage::Preparation;
         State->BossPhase = 0;
         State->EncounterPlayerCount = FMath::Clamp(HumanControllers().Num(), 1, 3);
+    }
+    int32 StartIndex = 0;
+    for (TActorIterator<APlayerStart> It(GetWorld()); It; ++It)
+    {
+        It->SetActorLocation(ChapterOrigin + FVector(-650 + (StartIndex % 3) * 180, -100 + (StartIndex % 3) * 100, 110));
+        ++StartIndex;
     }
     int32 Index = 0;
     for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
@@ -435,7 +464,7 @@ void AAlphaGameMode::RestartPrototypeRound()
         if (AAlphaCharacter* Character = Cast<AAlphaCharacter>(Player->GetPawn()))
         {
             Character->ResetForRound();
-            Character->TeleportTo(FVector(-650 + Index * 180, -100 + Index * 100, 110), FRotator::ZeroRotator, false, true);
+            Character->TeleportTo(ChapterOrigin + FVector(-650 + Index * 180, -100 + Index * 100, 110), FRotator::ZeroRotator, false, true);
         }
         else
         {
@@ -447,11 +476,55 @@ void AAlphaGameMode::RestartPrototypeRound()
     {
         Bot->ResetForRound();
         if (!Bot->GetController()) Bot->SpawnDefaultController();
-        Bot->TeleportTo(FVector(-650 + Index * 180, -100 + Index * 100, 110), FRotator::ZeroRotator, false, true);
+        Bot->TeleportTo(ChapterOrigin + FVector(-650 + Index * 180, -100 + Index * 100, 110), FRotator::ZeroRotator, false, true);
         Bot->ResetCompanionBrain();
         ++Index;
     }
     RefreshCompanions();
     if (AAlphaGameState* State = GetGameState<AAlphaGameState>()) State->EncounterPlayerCount = State->GetPartyCount();
     EnsureRoundMonitor();
+}
+
+void AAlphaGameMode::MarkChapterVictory()
+{
+    GetWorldTimerManager().ClearTimer(WaveTimer);
+    if (AAlphaGameState* State = GetGameState<AAlphaGameState>())
+    {
+        State->RemainingEnemies = 0;
+        State->RoundState = EAlphaRoundState::Victory;
+        State->EncounterStage = EAlphaEncounterStage::Finished;
+        State->StoryStage = EAlphaStoryStage::Debrief;
+        State->ForceNetUpdate();
+    }
+}
+
+bool AAlphaGameMode::TalkToStoryNPC(AAlphaCharacter* Speaker)
+{
+    AAlphaGameState* State = GetGameState<AAlphaGameState>();
+    if (!HasAuthority() || !State || !IsValid(Speaker) || Speaker->GetWorld() != GetWorld()) return false;
+    const bool bSafeRound = State->RoundState == EAlphaRoundState::Waiting || State->RoundState == EAlphaRoundState::Victory;
+    bool bEligible = false;
+    for (TActorIterator<AAlphaStoryNPC> It(GetWorld()); It; ++It)
+    {
+        if (It->ChapterIndex == State->ChapterIndex && It->CanTalk(Speaker))
+        {
+            bEligible = true;
+            break;
+        }
+    }
+    if (!AlphaStoryRules::CanTalk(State->ChapterIndex, static_cast<AlphaStoryRules::Stage>(State->StoryStage), bEligible, bSafeRound)) return false;
+    State->StoryStage = static_cast<EAlphaStoryStage>(AlphaStoryRules::AfterTalk(static_cast<AlphaStoryRules::Stage>(State->StoryStage)));
+    State->ForceNetUpdate();
+    return true;
+}
+
+bool AAlphaGameMode::AdvanceChapter()
+{
+    AAlphaGameState* State = GetGameState<AAlphaGameState>();
+    if (!HasAuthority() || !State || !AlphaStoryRules::CanAdvance(State->ChapterIndex,
+        static_cast<AlphaStoryRules::Stage>(State->StoryStage), State->RoundState == EAlphaRoundState::Victory)) return false;
+    ++State->ChapterIndex;
+    RestartPrototypeRound();
+    State->ForceNetUpdate();
+    return true;
 }

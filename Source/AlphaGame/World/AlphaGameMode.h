@@ -5,6 +5,7 @@
 #include "AlphaGameMode.generated.h"
 
 class AAlphaEnemy;
+class AAlphaCharacter;
 class AAlphaCompanion;
 
 UCLASS()
@@ -20,12 +21,15 @@ public:
     void RestartPrototypeRound();
     /** Explicit host-only entry from training; never begins on a login timer. */
     bool StartPrototypeRun();
+    bool TalkToStoryNPC(AAlphaCharacter* Speaker);
+    bool AdvanceChapter();
     bool IsSelectionAllowed() const;
     bool SetCompanionFillEnabled(bool bEnabled);
     void RefreshCompanions();
     bool IsCompanionFillEnabled() const { return bCompanionFillEnabled; }
 private:
     friend class FAlphaPartyLifecycleTest;
+    friend class FAlphaStoryAuthorityTest;
     TArray<APlayerController*> HumanControllers(const AController* Ignore = nullptr) const;
     TArray<AAlphaCompanion*> CompanionActors() const;
     void UpdatePartyCounts();
@@ -33,6 +37,7 @@ private:
     static void DestroyCompanion(AAlphaCompanion* Companion);
     bool bCompanionFillEnabled = true;
     void StartNextWave();
+    void MarkChapterVictory();
     void CheckRound();
     void EnsureRoundMonitor();
     void StartBossEncounter();

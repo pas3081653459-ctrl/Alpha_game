@@ -32,3 +32,7 @@ jobs:
         run: python3 Scripts/run_player_control_tests.py
       - name: Check undefined behavior in player-control rules
         run: python3 Scripts/run_player_control_tests.py --sanitize
+      - name: Compile and run chapter and story rules
+        run: python3 Scripts/run_story_tests.py
+      - name: Check undefined behavior in story rules
+        run: python3 Scripts/run_story_tests.py --sanitize

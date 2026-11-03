@@ -6,7 +6,7 @@
 
 | 检查 | 结果 | 能证明什么 |
 |---|---|---|
-| `python3 Scripts/check_project.py` | 通过 | 工程描述、42 个必要文件、23 个头文件、输入与本地 include、入口配置；发现 35 项不同的 UE 测试名称 |
+| `python3 Scripts/check_project.py` | 通过 | 工程描述、50 个必要文件、27 个头文件、输入与本地 include、入口配置；发现 37 项不同的 UE 测试名称 |
 | `python3 Scripts/run_rules_tests.py` | 222/222 通过 | 实际共享规则在严格 C++17 编译器中的行为 |
 | `python3 Scripts/run_rules_tests.py --sanitize` | 222/222 通过，无 UBSan 报告 | 同一规则的未定义行为检查 |
 | `python3 Scripts/run_presentation_tests.py` / `--sanitize` | 各298/298通过 | 实际用于镜头距离、平滑、效果衰减的纯计算 |
@@ -31,7 +31,7 @@
 
 ## UE 测试：源码已写，全部未执行
 
-当前共 35 项：Combat 8 项、Combo 6 项、Movement 1 项、Coop 5 项、Abilities 5 项、Encounter 2 项、Companion 6 项、Party 1 项、Environment 1 项。
+当前共 37 项：Combat 8 项、Combo 6 项、Movement 1 项、Coop 5 项、Abilities 5 项、Encounter 2 项、Companion 6 项、Party 1 项、Environment 1 项、Story 2 项。
 
 包括伤害/友伤/死亡重置/无敌/救起/硬直、救援恢复/独占/受击/距离/断线/遮挡、技能冷却/非法输入/合作资源，以及 Boss 攻击区域/阶段/人数缩放/防止重复配置回血。
 
@@ -44,7 +44,7 @@
 - 当前 Linux 云机器没有 Unreal Editor、UnrealBuildTool 或 Windows 工具链。没有生成 EXE，没有运行图形、物理命中或三台真实 Windows 设备联机。
 - 正式手工模型、骨骼动画、声音和完整关卡尚未制作；已有程序化造型与网格技能效果。完整主材质 `.uasset` 仍需在引擎运行 Art 生成步骤。
 
-下一执行入口是 README 的 Windows 构建命令。先取得真实 UHT/UBT 结果，再运行 35 项 UE 测试与完整单人/三机流程，按 `ACCEPTANCE.md` 留存日志。引擎验收通过后，按 `PROJECT_PLAN.md` 自动进入工坊垂直切片的动作与美术制作，避免基于未经运行的接口批量生产内容。
+下一执行入口是 README 的 Windows 构建命令。先取得真实 UHT/UBT 结果，再运行 37 项 UE 测试与完整单人/三机流程，按 `ACCEPTANCE.md` 留存日志。引擎验收通过后，按 `PROJECT_PLAN.md` 自动进入工坊垂直切片的动作与美术制作，避免基于未经运行的接口批量生产内容。
 
 ## 美术增量验证
 
@@ -104,3 +104,11 @@
 调整：主光转到镜头侧（yaw140，强度10）、背侧无影补光4；主光priority1/补光0；手动曝光补偿+1；提亮铁色和地板、场景金属度上限0.35。Sky强度1作为补充而非唯一保证。表面材质生成器新增AmbientFill=0.16颜色底光，保留直接光与阴影，不改为全Unlit场景；需要重新执行生成脚本并重启编辑器。已有场景实例若保留旧组件值应重新生成/重进游戏。编辑器视口若禁用了Game Settings曝光，应先恢复该设置，避免与运行效果混淆。
 
 工程检查、Python语法、战斗222项与视觉298项及各自UBSan通过；没有UE，未完成修复后的截图对比或材质/引擎编译，参数仍需实机确认。
+
+## 三章剧情与启动UI增量
+
+- 工程一致性检查发现50个必要文件、27头文件、37项UE测试名；新增剧情纯规则499/499普通及UBSan通过，现五套总2977项。CI新增剧情套件，未查询远程运行结果。
+- 三地区坐标、玩家/AI/敌人/Boss/固定NPC、镜头与AI边界一并接入；首章2波、工坊3波+Boss、水道2波。
+- 新增真实NPC范围/高度/LOS/真人/存活测试以及完整三章GameMode权威流程测试源码；对话RPC使用章节/阶段/重开版本号快照并在完成时重验，重复完成不推进。
+- 中文启动/角色/组队菜单与分页对话代码已接入，取消不推进，长按按键不跳过多页；F交谈/E救援无冲突。
+- UE5.6编译、UMG布局、CJK字体、材质渲染、三章迁移、对话复制时序和打包尚未执行。共享规则不能替代这些验收。

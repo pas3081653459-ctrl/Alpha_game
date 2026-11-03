@@ -186,6 +186,8 @@ bool AAlphaCompanion::HasDirectPath(const FVector& Destination) const
 bool AAlphaCompanion::ChooseEvadeDestination(FVector& Destination) const
 {
     const FVector Origin = GetActorLocation();
+    const AAlphaGameState* State = GetWorld()->GetGameState<AAlphaGameState>();
+    const FVector ArenaOrigin = AAlphaGameState::GetChapterOrigin(State ? State->ChapterIndex : 0);
     if (!IsDangerous(Origin)) { Destination = Origin; return true; }
     bool bFound = false;
     float BestDistance = TNumericLimits<float>::Max();
@@ -196,7 +198,7 @@ bool AAlphaCompanion::ChooseEvadeDestination(FVector& Destination) const
         {
             const float Angle = 2.0f * PI * Index / 16.0f;
             FVector Candidate = Origin + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0) * Radius;
-            Candidate.X = FMath::Clamp(Candidate.X, -1250.0f, 1250.0f);
+            Candidate.X = FMath::Clamp(Candidate.X, ArenaOrigin.X - 1250., ArenaOrigin.X + 1250.);
             Candidate.Y = FMath::Clamp(Candidate.Y, -300.0f, 300.0f);
             if (IsDangerous(Candidate) || !HasDirectPath(Candidate)) continue;
             const float Distance = FVector::DistSquared2D(Origin, Candidate);
@@ -231,7 +233,9 @@ FVector AAlphaCompanion::AddPersonalSpace(const FVector& Direction) const
 
 void AAlphaCompanion::MoveToward(const FVector& Destination, float AcceptanceRadius)
 {
-    DesiredDestination = FVector(FMath::Clamp(Destination.X, -1250.0f, 1250.0f),
+    const AAlphaGameState* State = GetWorld()->GetGameState<AAlphaGameState>();
+    const FVector ArenaOrigin = AAlphaGameState::GetChapterOrigin(State ? State->ChapterIndex : 0);
+    DesiredDestination = FVector(FMath::Clamp(Destination.X, ArenaOrigin.X - 1250., ArenaOrigin.X + 1250.),
         FMath::Clamp(Destination.Y, -300.0f, 300.0f), GetActorLocation().Z);
     const FVector Delta = DesiredDestination - GetActorLocation();
     if (Delta.SizeSquared2D() <= FMath::Square(AcceptanceRadius)) { StopMoving(); return; }

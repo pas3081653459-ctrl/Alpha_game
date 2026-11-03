@@ -46,6 +46,16 @@ void AAlphaCombatCamera::Tick(float DeltaSeconds)
     Super::Tick(DeltaSeconds);
     APlayerController* Player = Cast<APlayerController>(GetOwner());
     if (!Player || !Player->IsLocalController()) return;
+    const AAlphaGameState* ChapterState = GetWorld()->GetGameState<AAlphaGameState>();
+    const int32 Chapter = ChapterState ? ChapterState->ChapterIndex : 0;
+    const FVector ChapterOrigin = AAlphaGameState::GetChapterOrigin(Chapter);
+    if (LastChapter != Chapter)
+    {
+        LastChapter = Chapter;
+        bInitialized = false; // Do not pan across the empty gap between chapters.
+        Impact = 0.f;
+        LastHealth = -1.f;
+    }
     float MinimumX = TNumericLimits<float>::Max();
     float MaximumX = -TNumericLimits<float>::Max();
     const auto Include = [&MinimumX, &MaximumX](float X)
@@ -57,15 +67,18 @@ void AAlphaCombatCamera::Tick(float DeltaSeconds)
     {
         // Downed teammates stay in frame so rescuers can locate them.
         // Remote player controllers do not exist on every client. Team is replicated.
-        if (It->GetCombatComponent()->TeamId == 1) Include(static_cast<float>(It->GetActorLocation().X));
+        if (It->GetCombatComponent()->TeamId == 1
+            && FMath::Abs(It->GetActorLocation().X - ChapterOrigin.X) < 1700.)
+            Include(static_cast<float>(It->GetActorLocation().X));
     }
     if (const AAlphaGameState* State = GetWorld()->GetGameState<AAlphaGameState>())
     {
         if (IsValid(State->ForgeBoss) && State->ForgeBoss->GetCombatComponent()->IsAlive())
             Include(static_cast<float>(State->ForgeBoss->GetActorLocation().X));
     }
-    if (MinimumX > MaximumX) MinimumX = MaximumX = 0.f;
-    const float CenterX = FMath::Clamp((MinimumX + MaximumX) * .5f, -350.f, 350.f);
+    if (MinimumX > MaximumX) MinimumX = MaximumX = static_cast<float>(ChapterOrigin.X);
+    const float CenterX = FMath::Clamp((MinimumX + MaximumX) * .5f,
+        static_cast<float>(ChapterOrigin.X) - 350.f, static_cast<float>(ChapterOrigin.X) + 350.f);
     const float HalfWidth = FMath::Max(FMath::Abs(MinimumX - CenterX), FMath::Abs(MaximumX - CenterX));
     int32 Width = 0, Height = 0;
     Player->GetViewportSize(Width, Height);

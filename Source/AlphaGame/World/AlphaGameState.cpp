@@ -1,5 +1,8 @@
 #include "World/AlphaGameState.h"
 #include "World/AlphaBreakableProp.h"
+#include "World/AlphaStoryNPC.h"
+#include "Rules/StoryRules.h"
+#include "Visuals/AlphaChapterEnvironment.h"
 #include "Characters/Boss/AlphaForgeBoss.h"
 #include "Visuals/AlphaArtLibrary.h"
 #include "Visuals/AlphaForgeEnvironment.h"
@@ -20,6 +23,9 @@ void AAlphaGameState::BeginPlay()
 void AAlphaGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    DOREPLIFETIME(AAlphaGameState, ChapterIndex);
+    DOREPLIFETIME(AAlphaGameState, StoryStage);
+    DOREPLIFETIME(AAlphaGameState, StoryRevision);
     DOREPLIFETIME(AAlphaGameState, Wave);
     DOREPLIFETIME(AAlphaGameState, RemainingEnemies);
     DOREPLIFETIME(AAlphaGameState, RoundState);
@@ -51,26 +57,55 @@ void AAlphaGameState::BuildPrototypeArena()
         Block->SetActorHiddenInGame(true);
         Mesh->SetCastShadow(false);
     };
-    AddCollisionBlock(FVector(0, 0, -50), FVector(28, 8, 1));
-    AddCollisionBlock(FVector(0, -450, 500), FVector(30, 1, 12));
-    AddCollisionBlock(FVector(0, 450, 500), FVector(30, 1, 12));
-    AddCollisionBlock(FVector(-1450, 0, 500), FVector(1, 10, 12));
-    AddCollisionBlock(FVector(1450, 0, 500), FVector(1, 10, 12));
-    if (HasAuthority())
+    for (int32 Chapter = 0; Chapter < AlphaStoryRules::ChapterCount; ++Chapter)
     {
-        // A small fixed set of attack-reactive crates, with no movement collision.
-        for (int32 Side : {-1, 1})
+        const FVector Origin = GetChapterOrigin(Chapter);
+        AddCollisionBlock(Origin + FVector(0, 0, -50), FVector(28, 8, 1));
+        AddCollisionBlock(Origin + FVector(0, -450, 500), FVector(30, 1, 12));
+        AddCollisionBlock(Origin + FVector(0, 450, 500), FVector(30, 1, 12));
+        AddCollisionBlock(Origin + FVector(-1450, 0, 500), FVector(1, 10, 12));
+        AddCollisionBlock(Origin + FVector(1450, 0, 500), FVector(1, 10, 12));
+        if (HasAuthority())
         {
-            for (int32 Index = 0; Index < 4; ++Index)
+            for (int32 Side : {-1, 1})
             {
-                GetWorld()->SpawnActor<AAlphaBreakableProp>(
-                    FVector(Side * (420.f + Index * 250.f), Index % 2 == 0 ? 260.f : -260.f, 34.f),
-                    FRotator::ZeroRotator);
+                for (int32 Index = 0; Index < 4; ++Index)
+                {
+                    GetWorld()->SpawnActor<AAlphaBreakableProp>(
+                        Origin + FVector(Side * (420.f + Index * 250.f), Index % 2 == 0 ? 260.f : -260.f, 34.f),
+                        FRotator::ZeroRotator);
+                }
             }
         }
+        // NPCs are deterministic local scenery on every peer; only the server
+        // GameMode accepts an interaction or changes the shared story stage.
+        const FTransform NPCTransform(FRotator::ZeroRotator, Origin + AAlphaStoryNPC::GetLocalPosition());
+        if (AAlphaStoryNPC* NPC = GetWorld()->SpawnActorDeferred<AAlphaStoryNPC>(AAlphaStoryNPC::StaticClass(), NPCTransform))
+        {
+            NPC->ChapterIndex = Chapter;
+            NPC->FinishSpawning(NPCTransform);
+        }
+        if (GetNetMode() != NM_DedicatedServer)
+        {
+            if (Chapter == 1)
+                GetWorld()->SpawnActor<AAlphaForgeEnvironment>(Origin, FRotator::ZeroRotator);
+            else if (AAlphaChapterEnvironment* Environment = GetWorld()->SpawnActor<AAlphaChapterEnvironment>(Origin, FRotator::ZeroRotator))
+                Environment->BuildForChapter(Chapter);
+        }
     }
-    if (GetNetMode() != NM_DedicatedServer)
-    {
-        GetWorld()->SpawnActor<AAlphaForgeEnvironment>(FVector::ZeroVector, FRotator::ZeroRotator);
-    }
+}
+
+FVector AAlphaGameState::GetChapterOrigin(int32 Chapter)
+{
+    return FVector(FMath::Clamp(Chapter, 0, AlphaStoryRules::ChapterCount - 1) * 6000.f, 0, 0);
+}
+
+int32 AAlphaGameState::GetChapterWaveCount() const
+{
+    return AlphaStoryRules::WaveCount(ChapterIndex);
+}
+
+bool AAlphaGameState::ChapterHasBoss() const
+{
+    return AlphaStoryRules::HasBoss(ChapterIndex);
 }
