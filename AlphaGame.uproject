@@ -1,0 +1,13 @@
+{
+  "FileVersion": 3,
+  "EngineAssociation": "5.6",
+  "Category": "Games",
+  "Description": "Ash Tide: three-player LAN action prototype",
+  "Plugins": [
+    { "Name": "PythonScriptPlugin", "Enabled": true, "TargetAllowList": ["Editor"] },
+    { "Name": "EditorScriptingUtilities", "Enabled": true, "TargetAllowList": ["Editor"] }
+  ],
+  "Modules": [
+    { "Name": "AlphaGame", "Type": "Runtime", "LoadingPhase": "Default" }
+  ]
+}

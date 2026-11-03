@@ -1,0 +1,26 @@
+name: Portable rules and project consistency
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  portable-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Check project wiring
+        run: python3 Scripts/check_project.py
+      - name: Compile and run shared gameplay rules
+        run: python3 Scripts/run_rules_tests.py
+      - name: Check undefined behavior in shared rules
+        run: python3 Scripts/run_rules_tests.py --sanitize
+      - name: Compile and run camera and effect presentation rules
+        run: python3 Scripts/run_presentation_tests.py
+      - name: Check undefined behavior in presentation rules
+        run: python3 Scripts/run_presentation_tests.py --sanitize
+      - name: Check tracked whitespace
+        run: git diff --check HEAD

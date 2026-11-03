@@ -1,0 +1,32 @@
+#pragma once
+
+#include <algorithm>
+#include <cmath>
+
+namespace AlphaPresentation
+{
+// The camera uses a horizontal FOV of 55 degrees. Include jump/depth space on
+// ultrawide displays and keep a predictable minimum view for solo play.
+inline double CameraDistance(double PlayerSpan, double AspectRatio)
+{
+    if (!std::isfinite(PlayerSpan) || !std::isfinite(AspectRatio)) return 2800.0;
+    const double Span = std::clamp(PlayerSpan, 0.0, 2800.0);
+    const double Aspect = std::clamp(AspectRatio, 0.5, 4.0);
+    const double Width = std::max({2200.0, Span + 650.0, 1000.0 * Aspect});
+    constexpr double TanHalfFOV = 0.5205670505517462;
+    return std::clamp(Width / (2.0 * TanHalfFOV), 2300.0, 3800.0);
+}
+
+inline double BlendWeight(double DeltaSeconds, double Speed)
+{
+    if (!std::isfinite(DeltaSeconds) || !std::isfinite(Speed) || DeltaSeconds <= 0.0 || Speed <= 0.0) return 0.0;
+    return 1.0 - std::exp(-std::min(DeltaSeconds, 1.0) * Speed);
+}
+
+inline double EffectEnvelope(double Age, double Lifetime)
+{
+    if (!std::isfinite(Age) || !std::isfinite(Lifetime) || Lifetime <= 0.0) return 0.0;
+    const double Remaining = 1.0 - std::clamp(Age / Lifetime, 0.0, 1.0);
+    return Remaining * Remaining;
+}
+}

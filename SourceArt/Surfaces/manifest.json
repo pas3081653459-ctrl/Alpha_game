@@ -1,0 +1,9 @@
+{
+  "generator": "AlphaGame.generate_surface_textures.v1",
+  "size": 256,
+  "provenance": "Original mathematical textures; no downloaded or licensed source imagery.",
+  "files": {
+    "T_ForgeDetail.png": "a6fee7e8ad940b69151d1f6f55e37f4de2416a33a1b14570021c6d22e7bd0f7f",
+    "T_ForgeNormal_N.png": "aa02578c5e0551d74dc408c9caa77c13c6fd489fb21751d9bef37a494628b0b6"
+  }
+}
