@@ -236,7 +236,7 @@ void AAlphaCompanion::MoveToward(const FVector& Destination, float AcceptanceRad
     const FVector Delta = DesiredDestination - GetActorLocation();
     if (Delta.SizeSquared2D() <= FMath::Square(AcceptanceRadius)) { StopMoving(); return; }
     DesiredMove = BotAction == EAlphaCompanionAction::Evade ? Delta.GetSafeNormal2D() : AddPersonalSpace(Delta.GetSafeNormal2D());
-    FaceAlongLane(DesiredMove.X);
+    FaceMoveIntent(DesiredMove);
 }
 
 void AAlphaCompanion::StopMoving()
@@ -257,7 +257,7 @@ void AAlphaCompanion::Follow(AAlphaCharacter* Human)
     if (!Human) { StopMoving(); return; }
     const float DepthOffset = static_cast<float>(GetArchetype() - 1) * 140.0f;
     const FVector Formation = Human->GetActorLocation() - Human->GetActorForwardVector() * (180.0f + GetArchetype() * 35.0f)
-        + FVector(0, DepthOffset, 0);
+        + Human->GetActorRightVector() * DepthOffset;
     if (IsDangerous(Formation)) { SetAction(EAlphaCompanionAction::Evade); StopMoving(); return; }
     MoveToward(Formation, 65.0f);
 }
@@ -266,17 +266,25 @@ bool AAlphaCompanion::TrySkill(AAlphaCharacter* Enemy)
 {
     if (!Enemy || !CombatComponent->CanAct()) return false;
     const FVector Delta = Enemy->GetActorLocation() - GetActorLocation();
-    FaceAlongLane(Delta.X);
+    FaceMoveIntent(Delta);
     const float Distance = Delta.Size();
-    for (int32 Slot = 0; Slot < 2; ++Slot)
+    // A full-energy ultimate has priority. Spend at most one I per three
+    // successful U casts, then reserve the last ten energy for reaching O.
+    const int32 Priority[] = {2, 1, 0};
+    for (int32 Slot : Priority)
     {
+        if (Slot == 1 && (BasicSkillsSinceSpend < 3 || GetAbilityComponent()->GetEnergy() >= 90.f)) continue;
+        if (!GetAbilityComponent()->CanUseSkill(Slot)) continue;
         // A dash into an active floor tell is never a valid defensive response.
         if (GetArchetype() == 1 && Slot == 0 && !Threats.IsEmpty()) continue;
         if (!AlphaCompanionRules::ShouldUseSkill(GetArchetype(), Slot, Distance, true,
-            GetAbilityComponent()->GetSkillRemaining(Slot), CombatComponent->CanAct())) continue;
+            GetAbilityComponent()->GetSkillRemaining(Slot), CombatComponent->CanAct(), GetAbilityComponent()->GetEnergy())) continue;
         if (!AlphaCompanionRules::InSkillFootprint(GetArchetype(), Slot,
-            FVector::DotProduct(Delta, GetActorForwardVector()), Delta.Y, Delta.Z)) continue;
+            FVector::DotProduct(Delta, GetActorForwardVector()), FVector::DotProduct(Delta, GetActorRightVector()), Delta.Z)) continue;
         GetAbilityComponent()->TryUseSkill(Slot);
+        if (GetAbilityComponent()->GetSkillRemaining(Slot) <= 0.f) continue;
+        if (Slot == 0) ++BasicSkillsSinceSpend;
+        else BasicSkillsSinceSpend = 0;
         return true;
     }
     return false;
@@ -286,26 +294,28 @@ void AAlphaCompanion::Attack(AAlphaCharacter* Enemy)
 {
     if (!Enemy) { StopMoving(); return; }
     const FVector Delta = Enemy->GetActorLocation() - GetActorLocation();
-    FaceAlongLane(Delta.X);
+    FaceMoveIntent(Delta);
     if (TrySkill(Enemy)) { StopMoving(); return; }
-    if (AlphaCompanionRules::InMeleeRange(Delta.X, Delta.Y, Delta.Z))
+    if (AlphaCompanionRules::InMeleeRange(FVector::DotProduct(Delta, GetActorForwardVector()),
+        FVector::DotProduct(Delta, GetActorRightVector()), Delta.Z))
     {
         StopMoving();
         if (ServerTime() >= NextAttackAt)
         {
-            CombatComponent->TryAttack(bNextHeavy);
-            NextAttackAt = ServerTime() + (bNextHeavy ? 1.05 : 0.5);
-            bNextHeavy = !bNextHeavy;
+            // The same single attack input advances the shared five-stage
+            // combo; recovery/input buffering remain combat-component rules.
+            CombatComponent->TryAttack(false);
+            NextAttackAt = ServerTime() + .3;
         }
     }
     else
     {
-        const float Side = FMath::IsNearlyZero(Delta.X) ? GetActorForwardVector().X : FMath::Sign(Delta.X);
         const float ForwardOffsets[] = {135.0f, 85.0f, 85.0f};
         const float DepthOffsets[] = {0.0f, -60.0f, 60.0f};
         const int32 Hero = FMath::Clamp(GetArchetype(), 0, 2);
         // Distinct in-range slots leave room for another bot and a human at the same enemy.
-        const FVector Approach = Enemy->GetActorLocation() - FVector(Side * ForwardOffsets[Hero], DepthOffsets[Hero], 0);
+        const FVector Approach = Enemy->GetActorLocation() - GetActorForwardVector() * ForwardOffsets[Hero]
+            + GetActorRightVector() * DepthOffsets[Hero];
         if (IsDangerous(Approach)) { SetAction(EAlphaCompanionAction::Evade); StopMoving(); return; }
         MoveToward(Approach, 25.0f);
     }
@@ -415,7 +425,7 @@ void AAlphaCompanion::ResetCompanionBrain()
     RescueRetryAt = 0.0;
     NextAttackAt = 0.0;
     EvadeUntil = 0.0;
-    bNextHeavy = false;
+    BasicSkillsSinceSpend = 0;
     SetAction(EAlphaCompanionAction::Idle);
 }
 

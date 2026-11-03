@@ -9,6 +9,7 @@ class USceneComponent;
 class UStaticMeshComponent;
 class UInstancedStaticMeshComponent;
 class UMaterialInstanceDynamic;
+class AAlphaCombatEffect;
 enum class EAlphaPrimitive : uint8;
 
 /** Local, collision-free modular silhouettes and procedural animation; never drives gameplay. */
@@ -26,6 +27,9 @@ public:
     void RefreshAppearance(int32 Hero, bool bEnemy, bool bBoss);
     void SetDefeated(bool bNewDefeated);
     void PlayAttack(bool bHeavy);
+    /** Five-stage player chain; timing and extent come from PlayerControlRules. */
+    void PlayCombo(int32 Stage, bool bAirborne);
+    void PlayRoll();
     void CancelAttackPresentation();
     void PlayHit(float Damage);
     void PlayPoiseBreak();
@@ -48,6 +52,7 @@ private:
     void ClearParts();
     void UpdateTickBudget();
     void ApplyMaterialState(float HitFlash, float PoiseFlash);
+    void UpdateComboPose(float AttackTime);
     double VisualTime() const;
 
     UPROPERTY(Transient)
@@ -93,6 +98,10 @@ private:
     bool bDefeatedVisual = false;
     bool bHeavyAttack = false;
     bool bAttackCueSpawned = true;
+    int32 ComboStage = 0;
+    bool bComboAirborne = false;
+    FVector AttackFacing = FVector::ForwardVector;
+    TWeakObjectPtr<AAlphaCombatEffect> AttackCue;
     bool bBossWindup = false;
     int32 BossAttackType = 0;
     float BossWindupProgress = 0.0f;
@@ -100,6 +109,8 @@ private:
     double AttackStartedAt = -1000.0;
     double HitUntil = -1000.0;
     double PoiseUntil = -1000.0;
+    double LastSprintCueAt = -1000.0;
+    double RollStartedAt = -1000.0;
     float AttackWindup = 0.12f;
     float AttackDuration = 0.3f;
     float LastHitFlash = -1.0f;

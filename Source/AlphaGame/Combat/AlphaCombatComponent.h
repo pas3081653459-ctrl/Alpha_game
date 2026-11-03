@@ -9,6 +9,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FAlphaCombatEvent);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FAlphaAttackEvent, bool, bHeavy);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FAlphaHitEvent, float, ActualDamage, AActor*, InstigatorActor);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FAlphaHitConfirmedEvent, AActor*, Target, bool, bPoiseBroken);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FAlphaComboAttackEvent, int32, Stage, bool, bAirborne);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FAlphaAirComboEvent, bool, bHolding);
 
 /** Server-authoritative timed attacks, hit reactions, defensive windows and vitals. */
 UCLASS(ClassGroup=(AlphaGame), meta=(BlueprintSpawnableComponent))
@@ -22,6 +24,18 @@ public:
     UFUNCTION(BlueprintCallable, Category="Combat")
     void TryAttack(bool bHeavy = false);
 
+    UFUNCTION(BlueprintPure, Category="Combat|Combo")
+    int32 GetComboStage() const { return ComboStage; }
+
+    UFUNCTION(BlueprintPure, Category="Combat|Combo")
+    bool IsAirComboActive() const { return bAirComboActive; }
+
+    UFUNCTION(BlueprintPure, Category="Combat|Combo")
+    float GetComboWindup() const;
+
+    UFUNCTION(BlueprintPure, Category="Combat|Combo")
+    float GetComboDuration() const;
+
     /** Only effective on authority. Clients cannot submit damage or positions. */
     UFUNCTION(BlueprintCallable, Category="Combat")
     void ReceiveHit(float Damage, float PoiseDamage, AActor* InstigatorActor);
@@ -31,6 +45,10 @@ public:
 
     UFUNCTION(BlueprintPure, Category="Combat")
     bool CanAct() const;
+
+    /** Keep the rendered facing and authority hit volume aligned for this attack. */
+    bool IsAttackInProgress() const;
+    FVector GetAttackFacing() const { return PendingFacing; }
 
     UFUNCTION(BlueprintCallable, Category="Combat")
     void SetInvulnerableFor(float Duration);
@@ -55,6 +73,9 @@ public:
     /** Configure only while entering/restarting a round; resets vitals. Server-only. */
     UFUNCTION(BlueprintCallable, Category="Combat")
     void ConfigureArchetype(int32 Archetype);
+
+    UFUNCTION(BlueprintCallable, Category="Combat")
+    void ConfigureEnemyProfile();
 
     UFUNCTION(BlueprintPure, Category="Combat")
     int32 GetDamageRevision() const { return DamageRevision; }
@@ -97,6 +118,17 @@ public:
     UPROPERTY(BlueprintAssignable, Category="Combat")
     FAlphaAttackEvent OnAttack;
 
+    /** Team 1 uses this event instead of OnAttack, once per accepted combo stage. */
+    UPROPERTY(BlueprintAssignable, Category="Combat|Combo")
+    FAlphaComboAttackEvent OnComboAttack;
+
+    UPROPERTY(BlueprintAssignable, Category="Combat|Combo")
+    FAlphaCombatEvent OnComboFinished;
+
+    /** Character owns movement implementation; authority listens to begin/end its air hold. */
+    UPROPERTY(BlueprintAssignable, Category="Combat|Combo")
+    FAlphaAirComboEvent OnAirComboChanged;
+
     UPROPERTY(BlueprintAssignable, Category="Combat")
     FAlphaCombatEvent OnAttackCancelled;
 
@@ -109,6 +141,7 @@ public:
 
 protected:
     virtual void BeginPlay() override;
+    virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
@@ -179,19 +212,41 @@ private:
     UPROPERTY(Replicated)
     int32 PoiseBreakRevision = 0;
 
+    UPROPERTY(Replicated)
+    int32 ComboStage = 0;
+
+    UPROPERTY(Replicated)
+    bool bAirComboActive = false;
+
     FTimerHandle WindupTimer;
     FTimerHandle RecoveryTimer;
+    FTimerHandle ComboTimeoutTimer;
+    FTimerHandle AirComboLimitTimer;
     bool bPendingHeavy = false;
     bool bAttackPending = false;
     bool bBufferedAttack = false;
     bool bBufferedHeavy = false;
     double BufferedAttackExpires = 0.0;
+    bool bPendingCombo = false;
+    bool bPendingAirborne = false;
+    bool bAirHoldUsedForCurrentJump = false;
+    bool bLastComboAirborne = false;
+    FVector PendingFacing = FVector::ForwardVector;
 
     UFUNCTION(Server, Reliable)
     void ServerTryAttack(bool bHeavy);
 
     UFUNCTION(NetMulticast, Unreliable)
-    void MulticastAttack(bool bHeavy);
+    void MulticastAttack(bool bHeavy, FVector Facing);
+
+    UFUNCTION(NetMulticast, Reliable)
+    void MulticastComboAttack(int32 Stage, bool bAirborne, FVector Facing);
+
+    UFUNCTION(NetMulticast, Reliable)
+    void MulticastComboFinished();
+
+    UFUNCTION(NetMulticast, Reliable)
+    void MulticastAirComboChanged(bool bHolding);
 
     UFUNCTION(NetMulticast, Reliable)
     void MulticastAttackCancelled();
@@ -212,6 +267,11 @@ private:
     void ReleaseAttack();
     void FinishRecovery();
     void CancelPendingAttack();
+    void FinishCombo();
+    void ExpireCombo();
+    void ExpireAirCombo();
+    void SetAirComboActive(bool bActive);
+    bool IsOwnerAirborne() const;
     double CombatTime() const;
     bool IsFriendly(const AActor* OtherActor) const;
     bool bEndingPlay = false;

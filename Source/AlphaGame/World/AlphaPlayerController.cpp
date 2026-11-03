@@ -75,7 +75,11 @@ void AAlphaPlayerController::SetLobbyVisible(bool bVisible)
     {
         SetIgnoreMoveInput(true);
         SetIgnoreLookInput(true);
-        if (AAlphaCharacter* Character = Cast<AAlphaCharacter>(GetPawn())) Character->GetReviveComponent()->EndRevive();
+        if (AAlphaCharacter* Character = Cast<AAlphaCharacter>(GetPawn()))
+        {
+            Character->StopSprint();
+            Character->GetReviveComponent()->EndRevive();
+        }
     }
 }
 

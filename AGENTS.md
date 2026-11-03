@@ -10,3 +10,5 @@
 - Document behavior and limitations in `README.md`, `Docs/M1_PROGRESS.md`, and `Docs/VALIDATION.md`. Match explanations to the implementation, including generated-material fallback and unsupported mid-run reconnection.
 
 - Test companions are now explicitly requested: default fill to three during preparation, keep human connection seats separate, use authoritative shared combat/rescue, and never change a live encounter population. Run `python3 Scripts/run_companion_tests.py` and `python3 Scripts/run_companion_tests.py --sanitize` for roster/AI rule changes. Preserve the distinction between test AI and complex navigation or guaranteed AI completion.
+
+- Current controls supersede older design notes: WASD moves/faces in XY; same-key double tap runs at 2.5x; J cycles five stages and supports bounded per-flight air hold; K jumps; L rolls along facing; U adds 10 energy, I costs 10, O needs and spends 100. Melee never awards energy or auto-empowers skills. Run `Scripts/run_player_control_tests.py` with and without `--sanitize` for input/combo/resource changes.

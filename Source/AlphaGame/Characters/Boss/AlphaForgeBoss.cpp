@@ -129,7 +129,7 @@ void AAlphaForgeBoss::Tick(float DeltaSeconds)
     if (!Target) return;
     FVector Delta = Target->GetActorLocation() - GetActorLocation();
     Delta.Z = 0.f;
-    FaceAlongLane(Delta.X);
+    FaceMoveIntent(Delta);
     if (Delta.SizeSquared() > FMath::Square(650.f))
     {
         AddMovementInput(Delta.GetSafeNormal());
@@ -159,7 +159,7 @@ void AAlphaForgeBoss::BeginAttack(AAlphaCharacter* Target)
     TelegraphOrigin.Z = 8.f;
     const float BaseWindup = AttackType == EAlphaForgeAttack::Hammer ? 1.35f : (AttackType == EAlphaForgeAttack::FireLine ? 1.05f : .8f);
     AttackServerStartTime = ServerTime();
-    AttackResolveTime = AttackServerStartTime + BaseWindup * (BossPhase == 2 ? .75f : 1.f);
+    AttackResolveTime = AttackServerStartTime + BaseWindup * 1.1f * (BossPhase == 2 ? .75f : 1.f);
     AttackState = EAlphaForgeAttackState::Windup;
     ForceNetUpdate();
 }
@@ -178,7 +178,7 @@ bool AAlphaForgeBoss::IsPointInAttackZone(EAlphaForgeAttack Attack, const FVecto
 void AAlphaForgeBoss::ResolveAttack()
 {
     if (!HasAuthority() || !CombatComponent->CanAct()) return;
-    const float Damage = AttackType == EAlphaForgeAttack::Hammer ? 32.f : (AttackType == EAlphaForgeAttack::FireLine ? 24.f : 20.f);
+    const float Damage = AttackType == EAlphaForgeAttack::Hammer ? 20.f : (AttackType == EAlphaForgeAttack::FireLine ? 14.f : 12.f);
     for (TActorIterator<AAlphaCharacter> It(GetWorld()); It; ++It)
     {
         AAlphaCharacter* Target = *It;
@@ -190,7 +190,7 @@ void AAlphaForgeBoss::ResolveAttack()
         }
     }
     AttackState = EAlphaForgeAttackState::Recovery;
-    AttackCooldownUntil = ServerTime() + (BossPhase == 2 ? .8f : 1.2f);
+    AttackCooldownUntil = ServerTime() + (BossPhase == 2 ? 1.15f : 1.6f);
     ForceNetUpdate();
 }
 

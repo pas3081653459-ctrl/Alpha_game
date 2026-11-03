@@ -230,15 +230,29 @@ bool FAlphaCompanionSharedCombatTest::RunTest(const FString& Parameters)
     Bot->GetCombatComponent()->ReceiveHit(20.0f, 0.0f, Human);
     TestEqual(TEXT("Human friendly fire remains disabled"), Bot->GetCombatComponent()->GetHealth(), BotHealth - 20.0f);
 
-    // Reset actors for a depth-misaligned blade skill; the bot must move, not waste a cooldown.
+    // A W/S-side target is a valid facing direction, not an artificial depth miss.
     Bot->ResetForRound();
     Bot->ResetCompanionBrain();
     Bot->SetArchetype(0);
-    Enemy->SetActorLocation(FVector(30, 260, 100));
+    Enemy->ResetForRound();
+    Enemy->SetActorLocation(FVector(0, 125, 100));
+    const float NorthEnemyHealth = Enemy->GetCombatComponent()->GetHealth();
     Bot->Tick(0.11f);
-    TestEqual(TEXT("Misaligned first skill remains ready"), Bot->GetAbilityComponent()->GetSkillRemaining(0), 0.0f);
-    TestEqual(TEXT("Misaligned second skill remains ready"), Bot->GetAbilityComponent()->GetSkillRemaining(1), 0.0f);
-    TestTrue(TEXT("Bot moves to align instead"), !Bot->GetPendingMovementInputVector().IsNearlyZero());
+    TestTrue(TEXT("Companion faces a target directly along the depth axis"), Bot->GetActorForwardVector().Y > .99f);
+    TestTrue(TEXT("A depth-axis target is hit by the ordinary forward skill"), Enemy->GetCombatComponent()->GetHealth() < NorthEnemyHealth);
+    TestTrue(TEXT("The successful depth-axis skill earns its normal ten energy"), Bot->GetAbilityComponent()->GetEnergy() == 10.f);
+
+    // A genuinely distant target must not waste U/I/O or an unavailable energy skill.
+    Bot->ResetForRound();
+    Bot->ResetCompanionBrain();
+    Enemy->ResetForRound();
+    Enemy->SetActorLocation(FVector(30, 800, 100));
+    Bot->Tick(0.11f);
+    for (int32 Slot = 0; Slot < 3; ++Slot)
+    {
+        TestEqual(TEXT("Out-of-range skill remains ready"), Bot->GetAbilityComponent()->GetSkillRemaining(Slot), 0.0f);
+    }
+    TestTrue(TEXT("Bot moves toward a target outside its skill ranges"), !Bot->GetPendingMovementInputVector().IsNearlyZero());
     return true;
 }
 

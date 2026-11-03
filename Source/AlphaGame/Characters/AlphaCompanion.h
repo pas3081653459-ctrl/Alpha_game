@@ -77,5 +77,5 @@ private:
     double RescueRetryAt = 0.0;
     double NextAttackAt = 0.0;
     double EvadeUntil = 0.0;
-    bool bNextHeavy = false;
+    int32 BasicSkillsSinceSpend = 0;
 };

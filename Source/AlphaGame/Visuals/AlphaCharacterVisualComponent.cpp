@@ -2,6 +2,8 @@
 
 #include "Visuals/AlphaArtLibrary.h"
 #include "Visuals/AlphaCombatEffect.h"
+#include "Characters/AlphaCharacter.h"
+#include "Rules/PlayerControlRules.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -256,6 +258,7 @@ void UAlphaCharacterVisualComponent::BuildWeapon()
 
 void UAlphaCharacterVisualComponent::SetDefeated(bool bNewDefeated)
 {
+    RollStartedAt = -1000.0;
     bDefeatedVisual = bNewDefeated;
     AttackStartedAt = -1000.0;
     HitUntil = PoiseUntil = -1000.0;
@@ -284,14 +287,82 @@ double UAlphaCharacterVisualComponent::VisualTime() const
 void UAlphaCharacterVisualComponent::PlayAttack(bool bHeavy)
 {
     if (bDefeatedVisual || !WeaponRoot) return;
+    ComboStage = 0;
     bHeavyAttack = bHeavy;
     AttackWindup = bEnemyVisual ? (bHeavy ? 0.32f : 0.12f)
         : (HeroType == 0 ? (bHeavy ? 0.36f : 0.15f)
         : (HeroType == 1 ? (bHeavy ? 0.23f : 0.08f) : (bHeavy ? 0.30f : 0.12f)));
     AttackDuration = AttackWindup + (bHeavy ? 0.24f : 0.16f);
+    if (bEnemyVisual && !bBossVisual)
+    {
+        AttackWindup = .30f;
+        AttackDuration = .85f;
+    }
     AttackStartedAt = VisualTime();
     bAttackCueSpawned = false;
     UpdateTickBudget();
+}
+
+void UAlphaCharacterVisualComponent::PlayCombo(int32 Stage, bool bAirborne)
+{
+    if (bDefeatedVisual || !WeaponRoot) return;
+    if (AttackCue.IsValid()) AttackCue->Destroy();
+    ComboStage = FMath::Clamp(Stage, 1, 5);
+    bComboAirborne = bAirborne;
+    const AlphaPlayerControl::ComboAttackData Data = AlphaPlayerControl::GetComboAttack(ComboStage, bAirborne);
+    AttackWindup = static_cast<float>(Data.Windup);
+    AttackDuration = static_cast<float>(Data.Duration);
+    AttackStartedAt = VisualTime();
+    AttackFacing = GetOwner()->GetActorForwardVector().GetSafeNormal2D();
+    bAttackCueSpawned = false;
+    UpdateTickBudget();
+}
+
+void UAlphaCharacterVisualComponent::PlayRoll()
+{
+    if (bDefeatedVisual || !BodyRoot) return;
+    CancelAttackPresentation();
+    RollStartedAt = VisualTime();
+    UpdateTickBudget();
+}
+
+void UAlphaCharacterVisualComponent::UpdateComboPose(float AttackTime)
+{
+    const bool bPreparing = AttackTime < AttackWindup;
+    const float Phase = FMath::Clamp(bPreparing ? AttackTime / AttackWindup
+        : (AttackTime - AttackWindup) / (AttackDuration - AttackWindup), 0.f, 1.f);
+    const float Ease = FMath::InterpEaseOut(0.f, 1.f, Phase, 2.f);
+    FRotator Pose = FRotator::ZeroRotator;
+    FVector Offset = FVector::ZeroVector;
+    switch (ComboStage)
+    {
+    case 1: Pose.Yaw = bPreparing ? -70.f * Phase : FMath::Lerp(-70.f, 75.f, Ease); break;
+    case 2: Pose = FRotator(-10.f, bPreparing ? 75.f * Phase : FMath::Lerp(75.f, -80.f, Ease), 0); break;
+    case 3: Pose.Pitch = bPreparing ? 55.f * Phase : FMath::Lerp(55.f, -90.f, Ease); break;
+    case 4:
+        Offset.X = bPreparing ? -25.f * Phase : FMath::Sin(Phase * PI) * 65.f;
+        Pose.Pitch = -5.f;
+        break;
+    case 5:
+        Pose.Pitch = bPreparing ? -130.f * Phase : FMath::Lerp(-130.f, 80.f, Ease);
+        Offset.Z = bPreparing ? 45.f * Phase : FMath::Lerp(45.f, -30.f, Ease);
+        break;
+    default: break;
+    }
+    WeaponRoot->SetRelativeRotation(Pose);
+    WeaponRoot->SetRelativeLocation(Offset);
+    if (RightArm) RightArm->SetRelativeRotation(FRotator(Pose.Pitch * .65f, Pose.Yaw * .4f, 0));
+    if (bComboAirborne)
+    {
+        if (LeftLeg) LeftLeg->SetRelativeRotation(FRotator(35, 0, 0));
+        if (RightLeg) RightLeg->SetRelativeRotation(FRotator(-15, 0, 0));
+    }
+    if (!bPreparing && !bAttackCueSpawned)
+    {
+        AttackCue = AAlphaCombatEffect::SpawnCombo(GetWorld(), GetOwner()->GetActorLocation(), AttackFacing,
+            ComboStage, bComboAirborne, BaseTints.IsValidIndex(2) ? BaseTints[2] : FLinearColor::White);
+        bAttackCueSpawned = true;
+    }
 }
 
 void UAlphaCharacterVisualComponent::PlayHit(float Damage)
@@ -314,6 +385,10 @@ void UAlphaCharacterVisualComponent::PlayPoiseBreak()
 
 void UAlphaCharacterVisualComponent::CancelAttackPresentation()
 {
+    if (AttackCue.IsValid()) AttackCue->Destroy();
+    AttackCue.Reset();
+    ComboStage = 0;
+    bComboAirborne = false;
     AttackStartedAt = -1000.0;
     bAttackCueSpawned = true;
     if (WeaponRoot && !bBossWindup)
@@ -388,8 +463,17 @@ void UAlphaCharacterVisualComponent::TickComponent(float DeltaTime, ELevelTick T
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
     if (!BodyRoot || !WeaponRoot || !GetOwner() || bDefeatedVisual) return;
     const double Now = VisualTime();
+    const AAlphaCharacter* Hero = Cast<AAlphaCharacter>(GetOwner());
+    const bool bRunning = Hero && Hero->IsSprinting() && Hero->GetCharacterMovement()->IsMovingOnGround();
     const float Speed = FMath::Clamp(GetOwner()->GetVelocity().Size2D() / 500.0f, 0.0f, 1.0f);
-    GaitPhase += DeltaTime * Speed * 11.0f;
+    GaitPhase += DeltaTime * Speed * 11.0f * (bRunning ? 1.8f : 1.f);
+    if (bRunning && Speed > .1f && Now - LastSprintCueAt >= .1)
+    {
+        const FVector Feet = GetOwner()->GetActorLocation() - FVector(0, 0, 82);
+        AAlphaCombatEffect::Spawn(GetWorld(), Feet, GetOwner()->GetActorForwardVector(),
+            EAlphaEffectType::Sprint, FLinearColor(.25f, .7f, .8f));
+        LastSprintCueAt = Now;
+    }
     const float Wave = FMath::Sin(GaitPhase);
     const ACharacter* Character = Cast<ACharacter>(GetOwner());
     const bool bAirborne = Character && Character->GetCharacterMovement()->IsFalling();
@@ -401,6 +485,16 @@ void UAlphaCharacterVisualComponent::TickComponent(float DeltaTime, ELevelTick T
     const float HitFlash = FMath::Clamp(static_cast<float>((HitUntil - Now) / 0.16), 0.0f, 1.0f);
     const float PoiseFlash = FMath::Clamp(static_cast<float>((PoiseUntil - Now) / 0.4), 0.0f, 1.0f);
     BodyRoot->SetRelativeLocation(FVector(-HitFlash * 6.0f, 0, FMath::Abs(Wave) * Speed * 2.5f));
+    BodyRoot->SetRelativeRotation(FRotator(bRunning ? -13.f : 0.f, 0, 0));
+    const float RollAge = static_cast<float>(Now - RollStartedAt);
+    if (RollAge >= 0.f && RollAge < .35f)
+    {
+        const float Progress = RollAge / .35f;
+        BodyRoot->SetRelativeRotation(FRotator(-360.f * Progress, 0, 0));
+        BodyRoot->SetRelativeLocation(FVector(0, 0, -15.f * FMath::Sin(Progress * PI)));
+        if (LeftLeg) LeftLeg->SetRelativeRotation(FRotator(55, 0, 0));
+        if (RightLeg) RightLeg->SetRelativeRotation(FRotator(55, 0, 0));
+    }
     if (ClothAccent)
     {
         const float Flutter = FMath::Sin(GaitPhase - 0.8f) * Speed * 8.0f;
@@ -416,6 +510,10 @@ void UAlphaCharacterVisualComponent::TickComponent(float DeltaTime, ELevelTick T
         WeaponRoot->SetRelativeRotation(FRotator(-95.0f * Raise, BossAttackType == 1 ? -50.0f * Raise : 0.0f, 0));
         WeaponRoot->SetRelativeLocation(FVector(0, 0, Raise * 35.0f));
     }
+    else if (ComboStage > 0 && AttackTime >= 0.f && AttackTime < AttackDuration)
+    {
+        UpdateComboPose(AttackTime);
+    }
     else if (AttackTime >= 0.0f && AttackTime < AttackDuration)
     {
         const bool bBeforeImpact = AttackTime < AttackWindup;
@@ -429,9 +527,12 @@ void UAlphaCharacterVisualComponent::TickComponent(float DeltaTime, ELevelTick T
             // Boss range is defined by its replicated floor tell, never by an unrelated generic slash arc.
             if (!bBossVisual)
             {
-                AAlphaCombatEffect::Spawn(GetWorld(), GetOwner()->GetActorLocation(), GetOwner()->GetActorForwardVector(),
-                    bHeavyAttack ? EAlphaEffectType::HeavySlash : EAlphaEffectType::Slash,
-                    bEnemyVisual ? FLinearColor(1.0f, 0.25f, 0.04f) : BaseTints[2]);
+                if (bEnemyVisual)
+                    AAlphaCombatEffect::SpawnCombo(GetWorld(), GetOwner()->GetActorLocation(), GetOwner()->GetActorForwardVector(),
+                        1, false, FLinearColor(1.f, .25f, .04f));
+                else
+                    AAlphaCombatEffect::Spawn(GetWorld(), GetOwner()->GetActorLocation(), GetOwner()->GetActorForwardVector(),
+                        bHeavyAttack ? EAlphaEffectType::HeavySlash : EAlphaEffectType::Slash, BaseTints[2]);
             }
             bAttackCueSpawned = true;
         }

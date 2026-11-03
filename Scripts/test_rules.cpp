@@ -230,10 +230,10 @@ void ScalingAndCoopTests()
     Check(AlphaRules::WaveEnemyCount(100, 100) == 7, "wave and player upper bounds clamp");
     Check(AlphaRules::WaveEnemyCount(std::numeric_limits<int>::min(), std::numeric_limits<int>::min()) == 3,
         "extreme negative wave and players clamp without overflow");
-    Check(Near(AlphaRules::BossHealth(1), 600) && Near(AlphaRules::BossHealth(2), 900)
-        && Near(AlphaRules::BossHealth(3), 1200), "boss health scales for one to three players");
-    Check(Near(AlphaRules::BossHealth(std::numeric_limits<int>::min()), 600)
-        && Near(AlphaRules::BossHealth(std::numeric_limits<int>::max()), 1200), "boss players clamp at integer extremes");
+    Check(Near(AlphaRules::BossHealth(1), 360) && Near(AlphaRules::BossHealth(2), 540)
+        && Near(AlphaRules::BossHealth(3), 720), "boss health scales for one to three players");
+    Check(Near(AlphaRules::BossHealth(std::numeric_limits<int>::min()), 360)
+        && Near(AlphaRules::BossHealth(std::numeric_limits<int>::max()), 720), "boss players clamp at integer extremes");
     Check(AlphaRules::CooldownReady(5, 5), "cooldown accepts exact deadline");
     Check(!AlphaRules::CooldownReady(4.999, 5), "cooldown rejects early action");
     Check(AlphaRules::IsCoopFollowup(true, 10, 8, 8.5), "co-op accepts exact followup and cooldown boundaries");

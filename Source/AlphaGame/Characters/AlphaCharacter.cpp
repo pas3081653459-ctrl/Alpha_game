@@ -20,7 +20,7 @@
 
 AAlphaCharacter::AAlphaCharacter()
 {
-    PrimaryActorTick.bCanEverTick = false;
+    PrimaryActorTick.bCanEverTick = true;
     bReplicates = true;
     SetReplicateMovement(true);
     SetNetUpdateFrequency(60.0f);
@@ -28,7 +28,7 @@ AAlphaCharacter::AAlphaCharacter()
 
     GetCapsuleComponent()->InitCapsuleSize(34.0f, 88.0f);
     GetCharacterMovement()->MaxWalkSpeed = 480.0f;
-    GetCharacterMovement()->JumpZVelocity = 600.0f;
+    GetCharacterMovement()->JumpZVelocity = 680.0f;
     GetCharacterMovement()->AirControl = 0.35f;
     GetCharacterMovement()->bOrientRotationToMovement = false;
     bUseControllerRotationYaw = false;
@@ -81,6 +81,9 @@ void AAlphaCharacter::BeginPlay()
     CombatComponent->OnAttackCancelled.AddDynamic(this, &AAlphaCharacter::CancelAttackVisuals);
     CombatComponent->OnPoiseBroken.AddDynamic(this, &AAlphaCharacter::ShowPoiseBreak);
     CombatComponent->OnHit.AddDynamic(this, &AAlphaCharacter::ShowHit);
+    CombatComponent->OnComboAttack.AddDynamic(this, &AAlphaCharacter::ShowCombo);
+    CombatComponent->OnComboFinished.AddDynamic(this, &AAlphaCharacter::HandleComboFinished);
+    CombatComponent->OnAirComboChanged.AddDynamic(this, &AAlphaCharacter::HandleAirComboChanged);
     BodyMaterial = PrototypeBody->CreateAndSetMaterialInstanceDynamic(0);
     WeaponMaterial = PrototypeWeapon->CreateAndSetMaterialInstanceDynamic(0);
     VisualComponent->InitializeAnchors(PrototypeBody, PrototypeWeapon);
@@ -89,7 +92,7 @@ void AAlphaCharacter::BeginPlay()
     PrototypeWeapon->SetVisibility(false, false);
     if (HasAuthority() && CombatComponent->TeamId == 1) CombatComponent->ConfigureArchetype(Archetype);
     ApplyArchetypeAppearance();
-    bLastRequestedFacingRight = GetActorForwardVector().X >= 0.0f;
+    LastRequestedFacing = GetActorForwardVector().GetSafeNormal2D();
     RestoreWeaponPose();
     ApplyDefeatedState();
 }
@@ -98,6 +101,11 @@ void AAlphaCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
     GetWorldTimerManager().ClearTimer(WeaponFeedbackTimer);
     GetWorldTimerManager().ClearTimer(PoiseFeedbackTimer);
+    GetWorldTimerManager().ClearTimer(AirComboHoldTimer);
+    bAirComboHeld = false;
+    ApplyAirComboHold();
+    bSprinting = bPredictedSprinting = false;
+    RefreshSprintSpeed();
     Super::EndPlay(EndPlayReason);
 }
 
@@ -106,6 +114,14 @@ void AAlphaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
     Super::SetupPlayerInputComponent(PlayerInputComponent);
     PlayerInputComponent->BindAxis(TEXT("MoveForward"), this, &AAlphaCharacter::MoveForward);
     PlayerInputComponent->BindAxis(TEXT("MoveDepth"), this, &AAlphaCharacter::MoveDepth);
+    PlayerInputComponent->BindAction(TEXT("DirectionD"), IE_Pressed, this, &AAlphaCharacter::DirectionDPressed);
+    PlayerInputComponent->BindAction(TEXT("DirectionD"), IE_Released, this, &AAlphaCharacter::DirectionDReleased);
+    PlayerInputComponent->BindAction(TEXT("DirectionA"), IE_Pressed, this, &AAlphaCharacter::DirectionAPressed);
+    PlayerInputComponent->BindAction(TEXT("DirectionA"), IE_Released, this, &AAlphaCharacter::DirectionAReleased);
+    PlayerInputComponent->BindAction(TEXT("DirectionW"), IE_Pressed, this, &AAlphaCharacter::DirectionWPressed);
+    PlayerInputComponent->BindAction(TEXT("DirectionW"), IE_Released, this, &AAlphaCharacter::DirectionWReleased);
+    PlayerInputComponent->BindAction(TEXT("DirectionS"), IE_Pressed, this, &AAlphaCharacter::DirectionSPressed);
+    PlayerInputComponent->BindAction(TEXT("DirectionS"), IE_Released, this, &AAlphaCharacter::DirectionSReleased);
     PlayerInputComponent->BindAction(TEXT("Jump"), IE_Pressed, this, &AAlphaCharacter::BeginJump);
     PlayerInputComponent->BindAction(TEXT("Jump"), IE_Released, this, &ACharacter::StopJumping);
     PlayerInputComponent->BindAction(TEXT("LightAttack"), IE_Pressed, this, &AAlphaCharacter::LightAttack);
@@ -115,64 +131,188 @@ void AAlphaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
     PlayerInputComponent->BindAction(TEXT("Revive"), IE_Released, this, &AAlphaCharacter::EndRevive);
     PlayerInputComponent->BindAction(TEXT("Skill1"), IE_Pressed, this, &AAlphaCharacter::Skill1);
     PlayerInputComponent->BindAction(TEXT("Skill2"), IE_Pressed, this, &AAlphaCharacter::Skill2);
+    PlayerInputComponent->BindAction(TEXT("Skill3"), IE_Pressed, this, &AAlphaCharacter::Skill3);
+}
+
+void AAlphaCharacter::Tick(float DeltaSeconds)
+{
+    Super::Tick(DeltaSeconds);
+    if (IsPlayerControlled())
+    {
+        if (IsSprinting() && (IsMenuBlockingActions() || bDefeated || !CombatComponent->CanAct()
+            || !GetCharacterMovement()->IsMovingOnGround())) StopSprint();
+        if (IsLocallyControlled() && !IsMenuBlockingActions() && !bDefeated && CombatComponent->CanAct()) UpdateMoveFacing();
+    }
 }
 
 void AAlphaCharacter::MoveForward(float Value)
 {
+    MoveInputIntent.X = FMath::IsFinite(Value) ? FMath::Clamp(Value, -1.0f, 1.0f) : 0.0f;
     if (IsMenuBlockingActions() || bDefeated || !CombatComponent->CanAct()) return;
-    AddMovementInput(FVector::ForwardVector, Value);
-    if (!FMath::IsNearlyZero(Value))
-    {
-        FaceAlongLane(Value);
-        const bool bFaceRight = Value > 0.0f;
-        const double Now = GetWorld()->GetTimeSeconds();
-        // A server-side round teleport can change yaw without changing the client's cached input sign.
-        // Refresh while moving, at a bounded rate, rather than relying only on sign changes.
-        if (!HasAuthority() && (bFaceRight != bLastRequestedFacingRight || Now - LastFacingRequestTime >= 0.15))
-        {
-            ServerSetFacing(bFaceRight);
-            LastFacingRequestTime = Now;
-        }
-        bLastRequestedFacingRight = bFaceRight;
-    }
+    AddMovementInput(FVector::ForwardVector, MoveInputIntent.X);
 }
 
 void AAlphaCharacter::MoveDepth(float Value)
 {
+    MoveInputIntent.Y = FMath::IsFinite(Value) ? FMath::Clamp(Value, -1.0f, 1.0f) : 0.0f;
     if (!IsMenuBlockingActions() && !bDefeated && CombatComponent->CanAct())
     {
-        AddMovementInput(FVector::RightVector, Value);
+        AddMovementInput(FVector::RightVector, MoveInputIntent.Y);
     }
 }
 
 void AAlphaCharacter::FaceAlongLane(float Direction)
 {
-    if (!FMath::IsNearlyZero(Direction))
+    FaceMoveIntent(FVector(Direction, 0.0f, 0.0f));
+}
+
+void AAlphaCharacter::FaceMoveIntent(const FVector& XYIntent)
+{
+    if (XYIntent.ContainsNaN() || CombatComponent->IsAttackInProgress()
+        || (GetWorld() && GetWorld()->GetTimeSeconds() < VisualFacingLockedUntil)) return;
+    const FVector Direction = XYIntent.GetSafeNormal2D();
+    if (Direction.IsNearlyZero()) return;
+    const FRotator DesiredRotation(0.0f, Direction.Rotation().Yaw, 0.0f);
+    if (!GetActorRotation().Equals(DesiredRotation, 0.1f))
     {
-        const FRotator DesiredRotation(0.0f, Direction > 0.0f ? 0.0f : 180.0f, 0.0f);
-        if (!GetActorRotation().Equals(DesiredRotation, 0.1f))
-        {
-            SetActorRotation(DesiredRotation);
-            // Owning clients predict the turn; other clients receive authoritative movement rotation.
-            if (HasAuthority()) ForceNetUpdate();
-        }
+        SetActorRotation(DesiredRotation);
+        if (HasAuthority()) ForceNetUpdate();
     }
 }
 
-void AAlphaCharacter::ServerSetFacing_Implementation(bool bFaceRight)
+void AAlphaCharacter::ServerSetFacing_Implementation(FVector XYIntent)
 {
-    if (!bDefeated && CombatComponent->IsAlive())
+    if (XYIntent.ContainsNaN() || FMath::Abs(XYIntent.Z) > 0.01f
+        || !FMath::IsNearlyEqual(XYIntent.SizeSquared2D(), 1.0, 0.03)
+        || bDefeated || !CombatComponent->CanAct()) return;
+    FaceMoveIntent(XYIntent);
+}
+
+void AAlphaCharacter::UpdateMoveFacing()
+{
+    const FVector Intent = MoveInputIntent.GetSafeNormal2D();
+    if (Intent.IsNearlyZero()) return; // Preserve the last useful facing after releasing movement.
+    FaceMoveIntent(Intent);
+    const double Now = GetWorld()->GetTimeSeconds();
+    if (!HasAuthority() && (!Intent.Equals(LastRequestedFacing, 0.01f) || Now - LastFacingRequestTime >= 0.15))
     {
-        FaceAlongLane(bFaceRight ? 1.0f : -1.0f);
+        ServerSetFacing(Intent);
+        LastRequestedFacing = Intent;
+        LastFacingRequestTime = Now;
     }
 }
+
+bool AAlphaCharacter::IsSprinting() const
+{
+    return !HasAuthority() && IsLocallyControlled() ? bPredictedSprinting : bSprinting;
+}
+
+void AAlphaCharacter::RefreshSprintSpeed()
+{
+    if (CombatComponent->TeamId != 1) return; // Enemy/Boss movement profiles stay under their own AI.
+    GetCharacterMovement()->MaxWalkSpeed = BaseWalkSpeed * (IsSprinting() ? static_cast<float>(AlphaPlayerControl::SprintMultiplier) : 1.0f);
+}
+
+void AAlphaCharacter::ResetTapHistory(bool bAuthorityState)
+{
+    AlphaPlayerControl::TapState* States = bAuthorityState ? AuthorityTapStates : LocalTapStates;
+    for (int32 Index = 0; Index < 4; ++Index) States[Index] = AlphaPlayerControl::TapState{};
+}
+
+void AAlphaCharacter::AcknowledgeSprintState()
+{
+    SprintRevision = SprintRevision == MAX_int32 ? 0 : SprintRevision + 1;
+    ForceNetUpdate();
+}
+
+void AAlphaCharacter::SetSprintState(bool bEnabled, int32 KeyIndex)
+{
+    if (HasAuthority())
+    {
+        bSprinting = bEnabled;
+        SprintKey = bEnabled ? KeyIndex : -1;
+    }
+    else
+    {
+        bPredictedSprinting = bEnabled;
+        PredictedSprintKey = bEnabled ? KeyIndex : -1;
+    }
+    RefreshSprintSpeed();
+}
+
+void AAlphaCharacter::StopSprint()
+{
+    SetSprintState(false, -1);
+    ResetTapHistory(HasAuthority());
+    if (HasAuthority()) AcknowledgeSprintState();
+    else if (HasLocalNetOwner() && IsLocallyControlled()) ServerStopSprint();
+}
+
+void AAlphaCharacter::ServerStopSprint_Implementation()
+{
+    StopSprint();
+}
+
+void AAlphaCharacter::OnRep_SprintState()
+{
+    if (IsLocallyControlled())
+    {
+        // bSprinting remains pure authority state, so a rejection can correct prediction even when it stayed false.
+        const bool bStillHeld = SprintKey >= 0 && SprintKey < 4 && LocalTapStates[SprintKey].Held;
+        bPredictedSprinting = bSprinting && bStillHeld && !IsMenuBlockingActions() && !bDefeated;
+        PredictedSprintKey = bPredictedSprinting ? SprintKey : -1;
+    }
+    RefreshSprintSpeed();
+}
+
+void AAlphaCharacter::ProcessDirectionKey(int32 KeyIndex, bool bPressed, bool bAuthorityState)
+{
+    if (KeyIndex < 0 || KeyIndex >= 4 || !GetWorld()) return;
+    AlphaPlayerControl::TapState* States = bAuthorityState ? AuthorityTapStates : LocalTapStates;
+    const bool bDoubleTap = AlphaPlayerControl::RegisterTap(States[KeyIndex], bPressed, GetWorld()->GetTimeSeconds());
+    const int32 ActiveKey = bAuthorityState ? SprintKey : PredictedSprintKey;
+    if (!bPressed && ActiveKey == KeyIndex) SetSprintState(false, -1);
+    const FVector HeldIntent((States[0].Held ? 1.0f : 0.0f) - (States[1].Held ? 1.0f : 0.0f),
+        (States[2].Held ? 1.0f : 0.0f) - (States[3].Held ? 1.0f : 0.0f), 0.0f);
+    if (bPressed && !IsMenuBlockingActions() && !bDefeated && CombatComponent->CanAct()) FaceMoveIntent(HeldIntent);
+    if (bDoubleTap && bPressed && !HeldIntent.IsNearlyZero() && !IsMenuBlockingActions()
+        && !bDefeated && CombatComponent->CanAct() && GetCharacterMovement()->IsMovingOnGround()) SetSprintState(true, KeyIndex);
+    if (bAuthorityState) AcknowledgeSprintState();
+}
+
+void AAlphaCharacter::HandleDirectionKey(int32 KeyIndex, bool bPressed)
+{
+    if (bPressed && (IsMenuBlockingActions() || bDefeated)) return;
+    ProcessDirectionKey(KeyIndex, bPressed, HasAuthority());
+    if (!HasAuthority() && HasLocalNetOwner()) ServerDirectionKey(KeyIndex, bPressed);
+}
+
+void AAlphaCharacter::ServerDirectionKey_Implementation(int32 KeyIndex, bool bPressed)
+{
+    if (!IsPlayerControlled()) return;
+    ProcessDirectionKey(KeyIndex, bPressed, true);
+}
+
+void AAlphaCharacter::DirectionDPressed() { HandleDirectionKey(0, true); }
+void AAlphaCharacter::DirectionDReleased() { HandleDirectionKey(0, false); }
+void AAlphaCharacter::DirectionAPressed() { HandleDirectionKey(1, true); }
+void AAlphaCharacter::DirectionAReleased() { HandleDirectionKey(1, false); }
+void AAlphaCharacter::DirectionWPressed() { HandleDirectionKey(2, true); }
+void AAlphaCharacter::DirectionWReleased() { HandleDirectionKey(2, false); }
+void AAlphaCharacter::DirectionSPressed() { HandleDirectionKey(3, true); }
+void AAlphaCharacter::DirectionSReleased() { HandleDirectionKey(3, false); }
 
 void AAlphaCharacter::BeginJump()
 {
     if (!IsMenuBlockingActions() && !bDefeated && CombatComponent->CanAct())
     {
+        StopSprint();
         ReviveComponent->EndRevive();
-        Jump();
+        if (CanJump())
+        {
+            CancelAirComboForAction();
+            Jump();
+        }
     }
 }
 
@@ -180,6 +320,7 @@ void AAlphaCharacter::LightAttack()
 {
     if (!IsMenuBlockingActions() && !bDefeated)
     {
+        StopSprint();
         ReviveComponent->EndRevive();
         SyncAttackFacing();
         CombatComponent->TryAttack(false);
@@ -190,6 +331,7 @@ void AAlphaCharacter::HeavyAttack()
 {
     if (!IsMenuBlockingActions() && !bDefeated)
     {
+        StopSprint();
         ReviveComponent->EndRevive();
         SyncAttackFacing();
         CombatComponent->TryAttack(true);
@@ -198,25 +340,38 @@ void AAlphaCharacter::HeavyAttack()
 
 void AAlphaCharacter::SyncAttackFacing()
 {
+    // Direction key actions run before axis updates; use their held state when available.
+    const AlphaPlayerControl::TapState* States = HasAuthority() ? AuthorityTapStates : LocalTapStates;
+    const FVector Held((States[0].Held ? 1. : 0.) - (States[1].Held ? 1. : 0.),
+        (States[2].Held ? 1. : 0.) - (States[3].Held ? 1. : 0.), 0.);
+    if (!Held.IsNearlyZero()) FaceMoveIntent(Held);
     if (!HasAuthority())
     {
-        // Both facing and the combat component's attack RPC are reliable on this actor's channel.
-        // Submit facing first so an immediate post-reset attack uses the displayed direction.
-        const bool bFaceRight = GetActorForwardVector().X >= 0.0f;
-        ServerSetFacing(bFaceRight);
-        bLastRequestedFacingRight = bFaceRight;
+        const FVector Facing = GetActorForwardVector().GetSafeNormal2D();
+        ServerSetFacing(Facing);
+        LastRequestedFacing = Facing;
         LastFacingRequestTime = GetWorld()->GetTimeSeconds();
     }
 }
 
 void AAlphaCharacter::Dodge()
 {
-    if (!IsMenuBlockingActions() && !bDefeated) ServerDodge();
+    if (!IsMenuBlockingActions() && !bDefeated)
+    {
+        StopSprint();
+        SyncAttackFacing();
+        ServerDodge();
+    }
 }
 
 void AAlphaCharacter::BeginRevive()
 {
-    if (!IsMenuBlockingActions() && !bDefeated && CombatComponent->CanAct()) ReviveComponent->BeginRevive();
+    if (!IsMenuBlockingActions() && !bDefeated && CombatComponent->CanAct())
+    {
+        StopSprint();
+        CancelAirComboForAction();
+        ReviveComponent->BeginRevive();
+    }
 }
 
 void AAlphaCharacter::EndRevive()
@@ -227,6 +382,7 @@ void AAlphaCharacter::EndRevive()
 void AAlphaCharacter::Skill1()
 {
     if (IsMenuBlockingActions()) return;
+    StopSprint();
     ReviveComponent->EndRevive();
     SyncAttackFacing();
     AbilityComponent->TryUseSkill(0);
@@ -235,9 +391,19 @@ void AAlphaCharacter::Skill1()
 void AAlphaCharacter::Skill2()
 {
     if (IsMenuBlockingActions()) return;
+    StopSprint();
     ReviveComponent->EndRevive();
     SyncAttackFacing();
     AbilityComponent->TryUseSkill(1);
+}
+
+void AAlphaCharacter::Skill3()
+{
+    if (IsMenuBlockingActions()) return;
+    StopSprint();
+    ReviveComponent->EndRevive();
+    SyncAttackFacing();
+    AbilityComponent->TryUseSkill(2);
 }
 
 bool AAlphaCharacter::IsMenuBlockingActions() const
@@ -248,18 +414,24 @@ bool AAlphaCharacter::IsMenuBlockingActions() const
 
 void AAlphaCharacter::ServerDodge_Implementation()
 {
-    if (bDefeated || !CombatComponent->CanAct() || !GetCharacterMovement()->IsMovingOnGround()) return;
+    if (bDefeated || !CombatComponent->CanAct()) return;
     const double Now = GetWorld()->GetTimeSeconds();
     if (Now - LastDodgeTime < DodgeCooldown) return;
     LastDodgeTime = Now;
     ReviveComponent->CancelRevive();
     CombatComponent->SetInvulnerableFor(0.18f);
-    CombatComponent->SetActionLockFor(0.18f);
+    CombatComponent->SetActionLockFor(0.35f);
 
-    // Derive movement from authoritative velocity; clients cannot supply an arbitrary launch vector.
-    FVector Direction = GetVelocity().GetSafeNormal2D();
-    if (Direction.IsNearlyZero()) Direction = GetActorForwardVector();
+    // Rolling follows facing, including when momentum still points another way.
+    const FVector Direction = GetActorForwardVector().GetSafeNormal2D();
     LaunchCharacter(Direction * DodgeSpeed, true, false);
+    MulticastRoll(Direction);
+}
+
+void AAlphaCharacter::MulticastRoll_Implementation(FVector Facing)
+{
+    SetActorRotation(Facing.GetSafeNormal2D().Rotation());
+    VisualComponent->PlayRoll();
 }
 
 void AAlphaCharacter::HandleDeath()
@@ -282,6 +454,8 @@ void AAlphaCharacter::ApplyDefeatedState()
     GetWorldTimerManager().ClearTimer(WeaponFeedbackTimer);
     if (bDefeated)
     {
+        StopSprint();
+        EndAirComboHold();
         StopJumping();
         GetCharacterMovement()->StopMovementImmediately();
         // Keep gravity active for an aerial knockout; MOVE_None would leave a
@@ -300,6 +474,8 @@ void AAlphaCharacter::ApplyDefeatedState()
 void AAlphaCharacter::ShowAttack(bool bHeavy)
 {
     if (bDefeated) return;
+    SetActorRotation(CombatComponent->GetAttackFacing().Rotation());
+    VisualFacingLockedUntil = GetWorld()->GetTimeSeconds() + (bHeavy ? .8 : .85);
     ReviveComponent->CancelRevive();
     // Modular weapon animation is cosmetic; the combat component still owns all attack timing.
     VisualComponent->PlayAttack(bHeavy);
@@ -307,7 +483,96 @@ void AAlphaCharacter::ShowAttack(bool bHeavy)
 
 void AAlphaCharacter::CancelAttackVisuals()
 {
+    VisualFacingLockedUntil = 0.0;
     VisualComponent->CancelAttackPresentation();
+}
+
+void AAlphaCharacter::ShowCombo(int32 Stage, bool bAirborne)
+{
+    if (bDefeated) return;
+    if (HasAuthority() || IsLocallyControlled()) StopSprint();
+    ReviveComponent->CancelRevive();
+    SetActorRotation(CombatComponent->GetAttackFacing().Rotation());
+    VisualFacingLockedUntil = GetWorld()->GetTimeSeconds()
+        + AlphaPlayerControl::GetComboAttack(Stage, bAirborne).Duration;
+    VisualComponent->PlayCombo(Stage, bAirborne);
+}
+
+void AAlphaCharacter::HandleComboFinished()
+{
+    VisualFacingLockedUntil = 0.0;
+    EndAirComboHold();
+}
+
+void AAlphaCharacter::HandleAirComboChanged(bool bHolding)
+{
+    if (bHolding) BeginAirComboHold();
+    else EndAirComboHold();
+}
+
+void AAlphaCharacter::BeginAirComboHold()
+{
+    if (bDefeated || !CombatComponent->IsAlive()) return;
+    if (bAirComboHeld && bSavedGravity) return;
+    bAirComboHeld = true;
+    ApplyAirComboHold();
+    // An independent safety deadline never replaces the combat component's
+    // per-flight latch. A fifth hit or cancellation cannot renew that latch.
+    GetWorldTimerManager().SetTimer(AirComboHoldTimer, this, &AAlphaCharacter::AirComboHoldExpired,
+        static_cast<float>(AlphaPlayerControl::AirComboMaxSeconds), false);
+    if (HasAuthority()) ForceNetUpdate();
+}
+
+void AAlphaCharacter::EndAirComboHold()
+{
+    bAirComboHeld = false;
+    GetWorldTimerManager().ClearTimer(AirComboHoldTimer);
+    ApplyAirComboHold();
+    if (HasAuthority()) ForceNetUpdate();
+}
+
+void AAlphaCharacter::ApplyAirComboHold()
+{
+    UCharacterMovementComponent* Movement = GetCharacterMovement();
+    if (bAirComboHeld && !bDefeated)
+    {
+        if (!bSavedGravity)
+        {
+            SavedGravityScale = Movement->GravityScale;
+            bSavedGravity = true;
+        }
+        Movement->GravityScale = 0.f;
+        Movement->Velocity.Z = 0.;
+        Movement->SetMovementMode(MOVE_Falling);
+    }
+    else if (bSavedGravity)
+    {
+        Movement->GravityScale = SavedGravityScale;
+        bSavedGravity = false;
+    }
+}
+
+void AAlphaCharacter::OnRep_AirComboHeld()
+{
+    ApplyAirComboHold();
+}
+
+void AAlphaCharacter::AirComboHoldExpired()
+{
+    if (HasAuthority()) CombatComponent->CancelCurrentAttack();
+    EndAirComboHold();
+}
+
+void AAlphaCharacter::CancelAirComboForAction()
+{
+    if (HasAuthority()) CombatComponent->CancelCurrentAttack();
+    else if (HasLocalNetOwner()) ServerCancelAirCombo();
+    EndAirComboHold();
+}
+
+void AAlphaCharacter::ServerCancelAirCombo_Implementation()
+{
+    CombatComponent->CancelCurrentAttack();
 }
 
 void AAlphaCharacter::ShowPoiseBreak()
@@ -324,6 +589,7 @@ void AAlphaCharacter::ShowPoiseBreak()
 void AAlphaCharacter::ShowHit(float ActualDamage, AActor* InstigatorActor)
 {
     if (ActualDamage <= 0.0f) return;
+    if (HasAuthority() || IsLocallyControlled()) StopSprint();
     VisualComponent->PlayHit(ActualDamage);
     AAlphaCombatEffect::Spawn(GetWorld(), GetActorLocation(), GetActorForwardVector(), EAlphaEffectType::Hit, FLinearColor(1.0f, 0.65f, 0.3f));
 }
@@ -349,6 +615,8 @@ void AAlphaCharacter::RestoreBodyAppearance()
 void AAlphaCharacter::ResetForRound()
 {
     if (!HasAuthority()) return;
+    StopSprint();
+    EndAirComboHold();
     ReviveComponent->ResetForRound();
     AbilityComponent->ResetForRound();
     CombatComponent->ResetVitals();
@@ -371,6 +639,8 @@ bool AAlphaCharacter::RecoverFromRevive()
 void AAlphaCharacter::SetArchetype(int32 NewArchetype)
 {
     if (!HasAuthority() || CombatComponent->TeamId != 1 || NewArchetype < 0 || NewArchetype > 2) return;
+    StopSprint();
+    EndAirComboHold();
     Archetype = NewArchetype;
     ReviveComponent->ResetForRound();
     AbilityComponent->ResetForRound();
@@ -396,20 +666,21 @@ void AAlphaCharacter::ApplyArchetypeAppearance()
     {
         TeamColor = FLinearColor(0.02f, 0.7f, 0.55f);
         PrototypeBody->SetRelativeScale3D(FVector(0.45f, 0.45f, 1.4f));
-        GetCharacterMovement()->MaxWalkSpeed = 560.0f;
+        BaseWalkSpeed = 560.0f;
     }
     else if (Archetype == 2)
     {
         TeamColor = FLinearColor(0.95f, 0.7f, 0.08f);
         PrototypeBody->SetRelativeScale3D(FVector(0.55f, 0.55f, 1.65f));
-        GetCharacterMovement()->MaxWalkSpeed = 440.0f;
+        BaseWalkSpeed = 440.0f;
     }
     else
     {
         TeamColor = FLinearColor(0.65f, 0.06f, 0.12f);
         PrototypeBody->SetRelativeScale3D(FVector(0.65f, 0.6f, 1.5f));
-        GetCharacterMovement()->MaxWalkSpeed = 480.0f;
+        BaseWalkSpeed = 480.0f;
     }
+    RefreshSprintSpeed();
     VisualComponent->RefreshAppearance(Archetype, CombatComponent->TeamId != 1, ActorHasTag(TEXT("Boss")));
     RestoreBodyAppearance();
     RestoreWeaponPose();
@@ -420,4 +691,8 @@ void AAlphaCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(AAlphaCharacter, bDefeated);
     DOREPLIFETIME(AAlphaCharacter, Archetype);
+    DOREPLIFETIME(AAlphaCharacter, bSprinting);
+    DOREPLIFETIME(AAlphaCharacter, SprintKey);
+    DOREPLIFETIME(AAlphaCharacter, SprintRevision);
+    DOREPLIFETIME(AAlphaCharacter, bAirComboHeld);
 }

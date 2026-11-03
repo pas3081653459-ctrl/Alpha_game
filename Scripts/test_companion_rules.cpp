@@ -134,11 +134,11 @@ void RangeTests()
 void FootprintTests()
 {
     using AlphaCompanionRules::InSkillFootprint;
-    constexpr double Reach[3][2]{{110, 240}, {200, 0}, {0, 0}};
-    constexpr double Radius[3][2]{{100, 110}, {85, 210}, {420, 310}};
+    constexpr double Reach[3][3]{{110, 240, 360}, {200, 0, 0}, {0, 0, 0}};
+    constexpr double Radius[3][3]{{100, 110, 180}, {85, 210, 300}, {420, 310, 460}};
     for (int Hero = 0; Hero < 3; ++Hero)
     {
-        for (int Slot = 0; Slot < 2; ++Slot)
+        for (int Slot = 0; Slot < 3; ++Slot)
         {
             const double Length = Reach[Hero][Slot];
             const double R = Radius[Hero][Slot];
@@ -180,42 +180,68 @@ void FootprintTests()
     }
     for (int Invalid : {-1, 3, std::numeric_limits<int>::min(), std::numeric_limits<int>::max()})
         Check(!InSkillFootprint(Invalid, 0, 0, 0, 0), "invalid hero cannot index footprint table");
-    for (int Invalid : {-1, 2, std::numeric_limits<int>::min(), std::numeric_limits<int>::max()})
+    for (int Invalid : {-1, 3, std::numeric_limits<int>::min(), std::numeric_limits<int>::max()})
         Check(!InSkillFootprint(0, Invalid, 0, 0, 0), "invalid slot cannot index footprint table");
 }
 
 void SkillTests()
 {
     using AlphaCompanionRules::ShouldUseSkill;
-    constexpr double Ranges[3][2]{{190, 300}, {240, 200}, {400, 290}};
+    constexpr double Ranges[3][3]{{190, 300, 500}, {240, 200, 290}, {400, 290, 450}};
     for (int Hero = 0; Hero < 3; ++Hero)
     {
-        for (int Slot = 0; Slot < 2; ++Slot)
+        for (int Slot = 0; Slot < 3; ++Slot)
         {
             const double Range = Ranges[Hero][Slot];
-            Check(ShouldUseSkill(Hero, Slot, 0, true, 0, true), "skill accepts coincident enemy");
-            Check(ShouldUseSkill(Hero, Slot, Range - .001, true, 0, true), "skill accepts just inside range");
-            Check(ShouldUseSkill(Hero, Slot, Range, true, 0, true), "skill accepts exact range edge");
-            Check(!ShouldUseSkill(Hero, Slot, Range + .001, true, 0, true), "skill excludes outside range");
-            Check(ShouldUseSkill(Hero, Slot, Range, true, -1, true), "expired cooldown permits skill");
-            Check(!ShouldUseSkill(Hero, Slot, Range, true, .001, true), "positive remaining cooldown blocks skill");
-            Check(!ShouldUseSkill(Hero, Slot, Range, false, 0, true), "no enemy blocks skill");
-            Check(!ShouldUseSkill(Hero, Slot, Range, true, 0, false), "inability to act blocks skill");
-            Check(!ShouldUseSkill(Hero, Slot, -.001, true, 0, true), "negative distance blocks skill");
-            Check(!ShouldUseSkill(Hero, Slot, std::numeric_limits<double>::max(), true, 0, true), "extreme finite distance blocks skill");
+            Check(ShouldUseSkill(Hero, Slot, 0, true, 0, true, 100), "skill accepts coincident enemy");
+            Check(ShouldUseSkill(Hero, Slot, Range - .001, true, 0, true, 100), "skill accepts just inside range");
+            Check(ShouldUseSkill(Hero, Slot, Range, true, 0, true, 100), "skill accepts exact range edge");
+            Check(!ShouldUseSkill(Hero, Slot, Range + .001, true, 0, true, 100), "skill excludes outside range");
+            Check(ShouldUseSkill(Hero, Slot, Range, true, -1, true, 100), "expired cooldown permits skill");
+            Check(!ShouldUseSkill(Hero, Slot, Range, true, .001, true, 100), "positive remaining cooldown blocks skill");
+            Check(!ShouldUseSkill(Hero, Slot, Range, false, 0, true, 100), "no enemy blocks skill");
+            Check(!ShouldUseSkill(Hero, Slot, Range, true, 0, false, 100), "inability to act blocks skill");
+            Check(!ShouldUseSkill(Hero, Slot, -.001, true, 0, true, 100), "negative distance blocks skill");
+            Check(!ShouldUseSkill(Hero, Slot, std::numeric_limits<double>::max(), true, 0, true, 100), "extreme finite distance blocks skill");
             for (double Invalid : {std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity(),
                      -std::numeric_limits<double>::infinity()})
             {
-                Check(!ShouldUseSkill(Hero, Slot, Invalid, true, 0, true), "nonfinite distance blocks skill");
-                Check(!ShouldUseSkill(Hero, Slot, Range, true, Invalid, true), "nonfinite cooldown blocks skill");
+                Check(!ShouldUseSkill(Hero, Slot, Invalid, true, 0, true, 100), "nonfinite distance blocks skill");
+                Check(!ShouldUseSkill(Hero, Slot, Range, true, Invalid, true, 100), "nonfinite cooldown blocks skill");
             }
         }
     }
     for (int Invalid : {-1, 3, std::numeric_limits<int>::min(), std::numeric_limits<int>::max()})
-        Check(!ShouldUseSkill(Invalid, 0, 0, true, 0, true), "invalid hero cannot index skill range table");
-    for (int Invalid : {-1, 2, std::numeric_limits<int>::min(), std::numeric_limits<int>::max()})
-        Check(!ShouldUseSkill(0, Invalid, 0, true, 0, true), "invalid slot cannot index skill range table");
+        Check(!ShouldUseSkill(Invalid, 0, 0, true, 0, true, 100), "invalid hero cannot index skill range table");
+    for (int Invalid : {-1, 3, std::numeric_limits<int>::min(), std::numeric_limits<int>::max()})
+        Check(!ShouldUseSkill(0, Invalid, 0, true, 0, true, 100), "invalid slot cannot index skill range table");
 }
+
+void SkillEnergyTests()
+{
+    using AlphaCompanionRules::ShouldUseSkill;
+    for (int Hero = 0; Hero < 3; ++Hero)
+    {
+        Check(ShouldUseSkill(Hero, 0, 0, true, 0, true), "default zero energy permits U");
+        Check(!ShouldUseSkill(Hero, 1, 0, true, 0, true) && !ShouldUseSkill(Hero, 2, 0, true, 0, true),
+            "default zero energy blocks I and O");
+        for (int Slot = 0; Slot < 3; ++Slot)
+        {
+            for (double Energy : {0.0, 9.0, 10.0, 99.0, 100.0})
+            {
+                const bool Allowed = Slot == 0 || (Slot == 1 ? Energy >= 10 : Energy == 100);
+                Check(ShouldUseSkill(Hero, Slot, 0, true, 0, true, Energy) == Allowed,
+                    "AI resource gate matches U I O energy contract");
+                Check(!ShouldUseSkill(Hero, Slot, 0, true, .01, true, Energy), "AI cannot bypass cooldown at any energy");
+                Check(!ShouldUseSkill(Hero, Slot, 0, true, 0, false, Energy), "AI cannot bypass action lock at any energy");
+            }
+            for (double Invalid : {-1.0, 100.001, std::numeric_limits<double>::quiet_NaN(),
+                     std::numeric_limits<double>::infinity(), -std::numeric_limits<double>::infinity()})
+                Check(!ShouldUseSkill(Hero, Slot, 0, true, 0, true, Invalid), "AI cannot cast from invalid resource state");
+        }
+    }
+}
+
 }
 
 int main()
@@ -226,6 +252,7 @@ int main()
     RangeTests();
     SkillTests();
     FootprintTests();
+    SkillEnergyTests();
     std::cout << "Portable companion rules: " << Checks - Failures << '/' << Checks << " checks passed\n";
     std::cout << "Unreal spawning, AI movement, replication, revival and Windows gameplay remain separate tests.\n";
     return Failures == 0 ? 0 : 1;

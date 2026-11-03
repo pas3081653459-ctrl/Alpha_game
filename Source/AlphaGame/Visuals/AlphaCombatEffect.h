@@ -19,7 +19,10 @@ enum class EAlphaEffectType : uint8
     Coop,
     Hit,
     Poise,
-    Revive
+    Revive,
+    Combo,
+    Sprint,
+    Ultimate
 };
 
 /** Bounded, local-only mesh effects. No gameplay, collision, replication or transparent overdraw. */
@@ -35,6 +38,8 @@ public:
     /** Returns null on a dedicated server, distant camera, exhausted budget or missing mesh. */
     static AAlphaCombatEffect* Spawn(UWorld* World, const FVector& Location, const FVector& Forward,
         EAlphaEffectType Type, FLinearColor Color, bool bEmpowered = false);
+    static AAlphaCombatEffect* SpawnCombo(UWorld* World, const FVector& Location, const FVector& Forward,
+        int32 Stage, bool bAirborne, FLinearColor Color);
 
 protected:
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -48,9 +53,13 @@ private:
         FQuat Rotation = FQuat::Identity;
         float RadialStart = 1.0f;
         float RadialEnd = 1.0f;
+        float DelayFraction = 0.0f;
     };
 
-    void Configure(EAlphaEffectType InType, FLinearColor Color, bool bEmpowered);
+    static AAlphaCombatEffect* SpawnInternal(UWorld* World, const FVector& Location, const FVector& Forward,
+        EAlphaEffectType Type, FLinearColor Color, bool bEmpowered, int32 Stage, bool bAirborne);
+    void Configure(EAlphaEffectType InType, FLinearColor Color, bool bEmpowered, int32 Stage, bool bAirborne);
+    void ConfigureCombo(int32 Stage, bool bAirborne);
     void AddBeam(const FVector& Start, const FVector& End, float Thickness,
         const FVector& Drift = FVector::ZeroVector, float RadialStart = 1.0f, float RadialEnd = 1.0f);
     void AddRing(int32 Segments, float Radius, float Height, float Thickness, float StartScale, float EndScale);

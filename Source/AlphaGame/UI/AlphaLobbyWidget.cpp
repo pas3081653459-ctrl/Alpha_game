@@ -93,7 +93,7 @@ void UAlphaLobbyWidget::NativeTick(const FGeometry& Geometry, float DeltaSeconds
         Caption->SetText(FText::FromString(State && State->bCompanionFillEnabled
             ? TEXT("AI teammates: ON (click for pure solo)") : TEXT("AI teammates: OFF (click to fill party)")));
     StatusText->SetText(FText::FromString(FString::Printf(
-        TEXT("%s | Hero %d | %d human + %d AI\nChoose heroes, then host starts. Hold E to revive."),
+        TEXT("%s | Hero %d | %d human + %d AI\nWASD + double-tap run | J/K/L | U/I/O | E revive"),
         GetWorld()->GetNetMode() == NM_Client ? TEXT("Client") : TEXT("Host / solo"),
         Character ? Character->GetArchetype() + 1 : 0, State ? State->HumanPlayerCount : 0, State ? State->CompanionCount : 0)));
     if (bWaiting) bObservedPreparation = true;

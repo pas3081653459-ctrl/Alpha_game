@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include "Rules/PlayerControlRules.h"
 
 namespace AlphaCompanionRules
 {
@@ -50,22 +51,22 @@ inline bool InMeleeRange(double DeltaX, double DeltaY, double DeltaZ)
 }
 
 inline bool ShouldUseSkill(int Hero, int Slot, double Distance, bool HasEnemy,
-    double Cooldown, bool CanAct)
+    double Cooldown, bool CanAct, double Energy = 0.)
 {
-    if (!CanAct || !HasEnemy || Hero < 0 || Hero > 2 || Slot < 0 || Slot > 1
+    if (!CanAct || !HasEnemy || Hero < 0 || Hero > 2 || Slot < 0 || Slot > 2
         || !std::isfinite(Distance) || !std::isfinite(Cooldown) || Distance < 0.0 || Cooldown > 0.0) return false;
-    const double Ranges[3][2] = {{190., 300.}, {240., 200.}, {400., 290.}};
-    return Distance <= Ranges[Hero][Slot];
+    const double Ranges[3][3] = {{190., 300., 500.}, {240., 200., 290.}, {400., 290., 450.}};
+    return Distance <= Ranges[Hero][Slot] && AlphaPlayerControl::CanCast(Slot, Energy, CanAct, Cooldown <= 0.);
 }
 
 // Target-center coverage of the same sphere/segment-sphere skill shapes used
 // by the ability component. This prevents depth-misaligned cooldown waste.
 inline bool InSkillFootprint(int Hero, int Slot, double Forward, double Depth, double Height)
 {
-    if (Hero < 0 || Hero > 2 || Slot < 0 || Slot > 1 || !std::isfinite(Forward)
+    if (Hero < 0 || Hero > 2 || Slot < 0 || Slot > 2 || !std::isfinite(Forward)
         || !std::isfinite(Depth) || !std::isfinite(Height)) return false;
-    const double Reach[3][2] = {{110., 240.}, {200., 0.}, {0., 0.}};
-    const double Radius[3][2] = {{100., 110.}, {85., 210.}, {420., 310.}};
+    const double Reach[3][3] = {{110., 240., 360.}, {200., 0., 0.}, {0., 0., 0.}};
+    const double Radius[3][3] = {{100., 110., 180.}, {85., 210., 300.}, {420., 310., 460.}};
     const double SegmentX = std::clamp(Forward, 0.0, Reach[Hero][Slot]);
     return std::hypot(Forward - SegmentX, Depth, Height) <= Radius[Hero][Slot];
 }

@@ -68,24 +68,29 @@ void AAlphaHUD::DrawHUD()
         const int32 Hero = FMath::Clamp(Character->GetArchetype(), 0, 2);
         static const TCHAR* Names[] = {TEXT("SHEN YAN / BLADE"), TEXT("A LING / WEAVER"), TEXT("WEN DENG / LANTERN")};
         const FLinearColor Accent = Hero == 0 ? FLinearColor(.8f, .1f, .18f) : (Hero == 1 ? FLinearColor(.08f, .75f, .64f) : Gold);
-        const float Y = FMath::Max(120.f, Height - 163.f);
-        Card(16, Y, CardWidth, 147);
+        const float Y = FMath::Max(120.f, Height - 180.f);
+        Card(16, Y, CardWidth, 164);
         Text(Names[Hero], Accent, 29, Y + 9, 1.15f);
+        Text(FString::Printf(TEXT("COMBO %d / 5%s"), Combat->GetComboStage(), Character->IsSprinting() ? TEXT("  RUN x2.5") : (Combat->IsAirComboActive() ? TEXT("  AIR") : TEXT(""))),
+            Gold, 16 + CardWidth - 200, Y + 10, .9f);
         Text(FString::Printf(TEXT("HP %.0f / %.0f%s"), Combat->GetHealth(), Combat->GetMaxHealth(), Combat->IsInvulnerable() ? TEXT("  PROTECTED") : TEXT("")),
             FLinearColor::White, 29, Y + 33);
         Bar(29, Y + 55, CardWidth - 26, 9, Combat->GetHealth() / FMath::Max(1.f, Combat->GetMaxHealth()), Accent);
         Bar(29, Y + 69, CardWidth - 26, 4, Combat->GetPoise() / FMath::Max(1.f, Combat->GetMaxPoise()), Gold);
         if (UAlphaAbilityComponent* Ability = Character->GetAbilityComponent())
         {
-            Text(FString::Printf(TEXT("Q %.1fs    R %.1fs    RESONANCE %.0f / 100"), Ability->GetSkillRemaining(0), Ability->GetSkillRemaining(1), Ability->GetResonance()),
-                Muted, 29, Y + 80);
+            Text(FString::Printf(TEXT("ENERGY %.0f / 100"), Ability->GetEnergy()), Gold, 16 + CardWidth - 160, Y + 33, .9f);
+            Bar(29, Y + 79, CardWidth - 26, 5, Ability->GetEnergy() / 100.f, Gold);
+            Text(FString::Printf(TEXT("U +10  %.1fs"), Ability->GetSkillRemaining(0)), Ability->CanUseSkill(0) ? Gold : Muted, 29, Y + 92, .95f);
+            Text(FString::Printf(TEXT("I -10  %.1fs"), Ability->GetSkillRemaining(1)), Ability->CanUseSkill(1) ? Gold : Muted, 190, Y + 92, .95f);
+            Text(FString::Printf(TEXT("O 100  %.1fs"), Ability->GetSkillRemaining(2)), Ability->CanUseSkill(2) ? Gold : Muted, 350, Y + 92, .95f);
         }
         UAlphaReviveComponent* Revive = Character->GetReviveComponent();
-        FString Coop = Combat->IsAlive() ? TEXT("Hold E near a downed ally. Cooperate to build resonance.") : TEXT("DOWNED  /  A teammate can hold E nearby.");
+        FString Coop = Combat->IsAlive() ? TEXT("Double-tap a direction: RUN x2.5   |   Hold E: revive") : TEXT("DOWNED  /  A teammate can hold E nearby.");
         if (Revive->GetReviveTarget()) Coop = FString::Printf(TEXT("REVIVING %.0f%%  /  Hold E and avoid damage"), Revive->GetReviveProgress() * 100.f);
         else if (AAlphaCharacter* Rescuer = Revive->GetCurrentRescuer()) Coop = FString::Printf(TEXT("BEING REVIVED %.0f%%"), Rescuer->GetReviveComponent()->GetReviveProgress() * 100.f);
-        Text(Coop, Gold, 29, Y + 101, .95f);
-        Text(TEXT("WASD Move   SPACE Jump   LMB/RMB Attack   SHIFT Dodge"), Muted, 29, Y + 124, .9f);
+        Text(Coop, Gold, 29, Y + 114, .9f);
+        Text(TEXT("WASD Move/Face   J Combo   K Jump   L Roll   U/I/O Skills"), Muted, 29, Y + 137, .9f);
     }
     if (State && IsValid(State->ForgeBoss) && State->ForgeBoss->GetCombatComponent()->IsAlive())
     {

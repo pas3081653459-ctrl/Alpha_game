@@ -4,6 +4,7 @@
 #include "Combat/AlphaCombatComponent.h"
 #include "Coop/AlphaReviveComponent.h"
 #include "Rules/CombatRules.h"
+#include "Rules/PlayerControlRules.h"
 #include "CollisionQueryParams.h"
 #include "CollisionShape.h"
 #include "Visuals/AlphaCombatEffect.h"
@@ -42,7 +43,8 @@ void UAlphaAbilityComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(UAlphaAbilityComponent, SkillOneReadyAt);
     DOREPLIFETIME(UAlphaAbilityComponent, SkillTwoReadyAt);
-    DOREPLIFETIME(UAlphaAbilityComponent, Resonance);
+    DOREPLIFETIME(UAlphaAbilityComponent, UltimateReadyAt);
+    DOREPLIFETIME(UAlphaAbilityComponent, Energy);
 }
 
 double UAlphaAbilityComponent::AbilityTime() const
@@ -54,13 +56,25 @@ double UAlphaAbilityComponent::AbilityTime() const
 
 float UAlphaAbilityComponent::GetSkillRemaining(int32 Slot) const
 {
-    if (Slot < 0 || Slot > 1) return 0.0f;
-    return static_cast<float>(FMath::Max(0.0, (Slot == 0 ? SkillOneReadyAt : SkillTwoReadyAt) - AbilityTime()));
+    if (Slot < 0 || Slot > 2) return 0.0f;
+    const double ReadyAt = Slot == 0 ? SkillOneReadyAt : (Slot == 1 ? SkillTwoReadyAt : UltimateReadyAt);
+    return static_cast<float>(FMath::Max(0.0, ReadyAt - AbilityTime()));
+}
+
+bool UAlphaAbilityComponent::CanUseSkill(int32 Slot) const
+{
+    const AAlphaCharacter* Character = Cast<AAlphaCharacter>(GetOwner());
+    if (!Character || !GetWorld() || Slot < 0 || Slot > 2) return false;
+    const UAlphaCombatComponent* Combat = Character->GetCombatComponent();
+    if (!Combat || Combat->TeamId != 1 || Character->IsDefeated()) return false;
+    const double ReadyAt = Slot == 0 ? SkillOneReadyAt : (Slot == 1 ? SkillTwoReadyAt : UltimateReadyAt);
+    return AlphaPlayerControl::CanCast(Slot, Energy, Combat->CanAct(),
+        AlphaRules::CooldownReady(AbilityTime(), ReadyAt));
 }
 
 void UAlphaAbilityComponent::TryUseSkill(int32 Slot)
 {
-    if (!GetOwner() || Slot < 0 || Slot > 1) return;
+    if (!GetOwner() || Slot < 0 || Slot > 2) return;
     if (GetOwner()->HasAuthority()) ExecuteSkill(Slot);
     else if (GetOwner()->HasLocalNetOwner()) ServerUseSkill(Slot);
 }
@@ -73,52 +87,56 @@ void UAlphaAbilityComponent::ServerUseSkill_Implementation(int32 Slot)
 void UAlphaAbilityComponent::ExecuteSkill(int32 Slot)
 {
     AAlphaCharacter* Character = Cast<AAlphaCharacter>(GetOwner());
-    if (!Character || !Character->HasAuthority() || Slot < 0 || Slot > 1 || !GetWorld()) return;
+    if (!Character || !Character->HasAuthority() || !CanUseSkill(Slot)) return;
     UAlphaCombatComponent* Combat = Character->GetCombatComponent();
-    if (!Combat || Combat->TeamId != 1 || !Combat->CanAct()) return;
     const double Now = AbilityTime();
-    double& ReadyAt = Slot == 0 ? SkillOneReadyAt : SkillTwoReadyAt;
-    if (!AlphaRules::CooldownReady(Now, ReadyAt)) return;
+    double& ReadyAt = Slot == 0 ? SkillOneReadyAt : (Slot == 1 ? SkillTwoReadyAt : UltimateReadyAt);
 
     if (UAlphaReviveComponent* Revive = Character->GetReviveComponent()) Revive->CancelRevive();
+    Character->StopSprint();
     const int32 Archetype = FMath::Clamp(Character->GetArchetype(), 0, 2);
-    static const float Cooldowns[3][2] = {{6.0f, 8.0f}, {4.0f, 7.0f}, {7.0f, 9.0f}};
+    static const float Cooldowns[3][3] = {{3.0f, 8.0f, 20.0f}, {3.0f, 7.0f, 20.0f}, {3.0f, 9.0f, 20.0f}};
     ReadyAt = Now + Cooldowns[Archetype][Slot];
-    const bool bEmpowered = Resonance >= 100.0f;
-    const float Power = bEmpowered ? 1.5f : 1.0f;
-    if (bEmpowered) Resonance = 0.0f;
-    // Skills are instantaneous graybox effects with a short recovery, not montage-driven combos.
-    Combat->SetActionLockFor(Slot == 0 ? 0.35f : 0.55f);
-    MulticastSkill(Archetype, Slot, bEmpowered);
+    Energy = static_cast<float>(AlphaPlayerControl::EnergyChange(Slot, Energy));
+    // U alone builds energy. I and O have fixed costs; full energy never silently empowers U/I.
+    // The action lock also cancels pending melee, buffered combos and air-combo hold.
+    Combat->SetActionLockFor(Slot == 0 ? 0.35f : (Slot == 1 ? 0.55f : 0.8f));
+    MulticastSkill(Archetype, Slot, Slot == 2);
 
-    if (Archetype == 0 && Slot == 0)
+    if (Slot == 2)
+    {
+        if (Archetype == 0) AffectEnemies(180.0f, 360.0f, 100.0f, 110.0f);
+        else if (Archetype == 1) AffectEnemies(300.0f, 0.0f, 80.0f, 90.0f, 0.0f, 600.0f);
+        else AffectEnemies(460.0f, 0.0f, 65.0f, 140.0f);
+    }
+    else if (Archetype == 0 && Slot == 0)
     {
         // Guard burst: no claim that a successful parry was detected.
         Combat->SetInvulnerableFor(0.35f);
-        AffectEnemies(100.0f, 110.0f, 16.0f * Power, 25.0f * Power);
+        AffectEnemies(100.0f, 110.0f, 16.0f, 25.0f);
     }
     else if (Archetype == 0)
     {
-        AffectEnemies(110.0f, 240.0f, 42.0f * Power, 55.0f * Power);
+        AffectEnemies(110.0f, 240.0f, 42.0f, 55.0f);
     }
     else if (Archetype == 1 && Slot == 0)
     {
         // Launch uses normal CharacterMovement collision; never teleport through a wall.
         Character->LaunchCharacter(Character->GetActorForwardVector() * 900.0f, true, false);
         Combat->SetInvulnerableFor(0.12f);
-        AffectEnemies(85.0f, 200.0f, 20.0f * Power, 20.0f * Power);
+        AffectEnemies(85.0f, 200.0f, 20.0f, 20.0f);
     }
     else if (Archetype == 1)
     {
-        AffectEnemies(210.0f, 0.0f, 24.0f * Power, 26.0f * Power, 0.0f, 450.0f);
+        AffectEnemies(210.0f, 0.0f, 24.0f, 26.0f, 0.0f, 450.0f);
     }
     else if (Slot == 0)
     {
-        AffectEnemies(420.0f, 0.0f, 8.0f * Power, 16.0f * Power, 350.0f);
+        AffectEnemies(420.0f, 0.0f, 8.0f, 16.0f, 350.0f);
     }
     else
     {
-        AffectEnemies(310.0f, 0.0f, 12.0f * Power, 60.0f * Power);
+        AffectEnemies(310.0f, 0.0f, 12.0f, 60.0f);
     }
     Character->ForceNetUpdate();
 }
@@ -130,7 +148,8 @@ void UAlphaAbilityComponent::AffectEnemies(float Radius, float Reach, float Dama
     if (!Character || !Character->HasAuthority() || !GetWorld()) return;
     UAlphaCombatComponent* Combat = Character->GetCombatComponent();
     const FVector Start = Character->GetActorLocation();
-    const FVector End = Start + Character->GetActorForwardVector() * Reach;
+    const FVector Facing = Character->GetActorForwardVector().GetSafeNormal2D();
+    const FVector End = Start + (Facing.IsNearlyZero() ? FVector::ForwardVector : Facing) * Reach;
     FCollisionObjectQueryParams Objects;
     Objects.AddObjectTypesToQuery(ECC_Pawn);
     FCollisionQueryParams Query(SCENE_QUERY_STAT(AlphaSkill), false, Character);
@@ -176,7 +195,6 @@ void UAlphaAbilityComponent::HandleConfirmedHit(AActor* Target, bool bPoiseBroke
     UAlphaCombatComponent* Combat = Character->GetCombatComponent();
     if (!Combat || Combat->TeamId != 1 || !Combat->IsAlive()) return;
     const double Now = AbilityTime();
-    AddResonance(bPoiseBroken ? 10.0f : 6.0f);
     UAlphaAbilityComponent* Partner = nullptr;
     double MostRecent = -1000.0;
     for (TActorIterator<AAlphaCharacter> It(GetWorld()); It; ++It)
@@ -196,7 +214,7 @@ void UAlphaAbilityComponent::HandleConfirmedHit(AActor* Target, bool bPoiseBroke
     if (Partner && AlphaRules::IsCoopFollowup(true, Now, MostRecent, LastProc ? *LastProc : -1000.0))
     {
         // Propagate target-specific proc time to every teammate, preventing alternating RPCs
-        // from bypassing the shared target cooldown. Resource itself remains personal.
+        // from bypassing the shared target cooldown. This bonus never changes energy.
         for (TActorIterator<AAlphaCharacter> It(GetWorld()); It; ++It)
         {
             if (It->GetCombatComponent()->TeamId != Combat->TeamId) continue;
@@ -205,8 +223,6 @@ void UAlphaAbilityComponent::HandleConfirmedHit(AActor* Target, bool bPoiseBroke
                 Ability->LastCoopProcAt.Add(Key, Now);
             }
         }
-        AddResonance(12.0f);
-        Partner->AddResonance(8.0f);
         if (UAlphaCombatComponent* Victim = Target->FindComponentByClass<UAlphaCombatComponent>())
         {
             if (Victim->IsAlive()) Victim->ReceiveHit(0.0f, 18.0f, Character);
@@ -221,35 +237,29 @@ void UAlphaAbilityComponent::HandleConfirmedHit(AActor* Target, bool bPoiseBroke
     }
 }
 
-void UAlphaAbilityComponent::AddResonance(float Amount)
-{
-    if (!GetOwner() || !GetOwner()->HasAuthority() || !FMath::IsFinite(Amount)) return;
-    Resonance = FMath::Clamp(Resonance + FMath::Max(0.0f, Amount), 0.0f, 100.0f);
-    GetOwner()->ForceNetUpdate();
-}
-
 void UAlphaAbilityComponent::ResetForRound()
 {
     if (!GetOwner() || !GetOwner()->HasAuthority()) return;
-    SkillOneReadyAt = SkillTwoReadyAt = 0.0;
-    Resonance = 0.0f;
+    SkillOneReadyAt = SkillTwoReadyAt = UltimateReadyAt = 0.0;
+    Energy = 0.0f;
     LastHitTarget.Reset();
     LastHitAt = -1000.0;
     LastCoopProcAt.Reset();
     GetOwner()->ForceNetUpdate();
 }
 
-void UAlphaAbilityComponent::MulticastSkill_Implementation(int32 Archetype, int32 Slot, bool bEmpowered)
+void UAlphaAbilityComponent::MulticastSkill_Implementation(int32 Archetype, int32 Slot, bool bUltimate)
 {
+    OnSkillActivated.Broadcast(Slot);
     if (!GetOwner() || !GetWorld() || GetWorld()->GetNetMode() == NM_DedicatedServer) return;
     const FVector Origin = GetOwner()->GetActorLocation();
     const FLinearColor Color = Archetype == 0 ? FLinearColor(.9f, .5f, .22f)
         : (Archetype == 1 ? FLinearColor(.12f, .75f, .8f) : FLinearColor(.9f, .7f, .25f));
-    const EAlphaEffectType Type = Archetype == 0
+    const EAlphaEffectType Type = Slot == 2 ? EAlphaEffectType::Ultimate : (Archetype == 0
         ? (Slot == 0 ? EAlphaEffectType::Slash : EAlphaEffectType::HeavySlash)
         : (Archetype == 1 ? (Slot == 0 ? EAlphaEffectType::Dash : EAlphaEffectType::Launch)
-            : (Slot == 0 ? EAlphaEffectType::Pull : EAlphaEffectType::Pulse));
-    AAlphaCombatEffect::Spawn(GetWorld(), Origin, GetOwner()->GetActorForwardVector(), Type, Color, bEmpowered);
+            : (Slot == 0 ? EAlphaEffectType::Pull : EAlphaEffectType::Pulse)));
+    AAlphaCombatEffect::Spawn(GetWorld(), Origin, GetOwner()->GetActorForwardVector(), Type, Color, bUltimate);
 }
 
 void UAlphaAbilityComponent::MulticastCoopCue_Implementation(FVector Location)

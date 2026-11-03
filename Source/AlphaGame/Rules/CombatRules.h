@@ -89,7 +89,7 @@ inline int WaveEnemyCount(int Wave, int Players)
 
 inline double BossHealth(int Players)
 {
-    return 600.0 + 300.0 * (std::clamp(Players, 1, 3) - 1);
+    return 360.0 + 180.0 * (std::clamp(Players, 1, 3) - 1);
 }
 
 inline bool IsCoopFollowup(bool DifferentPlayer, double Now, double LastHit, double LastProc)

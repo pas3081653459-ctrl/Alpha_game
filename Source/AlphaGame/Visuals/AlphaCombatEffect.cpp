@@ -2,6 +2,7 @@
 
 #include "Visuals/AlphaArtLibrary.h"
 #include "Rules/PresentationRules.h"
+#include "Rules/PlayerControlRules.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Engine/World.h"
@@ -14,9 +15,10 @@ TArray<TWeakObjectPtr<AAlphaCombatEffect>> ActiveEffects;
 
 int32 EffectPriority(EAlphaEffectType Type)
 {
+    if (Type == EAlphaEffectType::Sprint) return 0;
     if (Type == EAlphaEffectType::Revive) return 4;
     if (Type == EAlphaEffectType::Hit || Type == EAlphaEffectType::Poise) return 3;
-    if (Type == EAlphaEffectType::Coop) return 2;
+    if (Type == EAlphaEffectType::Coop || Type == EAlphaEffectType::Ultimate) return 2;
     return 1;
 }
 }
@@ -34,11 +36,24 @@ AAlphaCombatEffect::AAlphaCombatEffect()
     Instances->SetGenerateOverlapEvents(false);
     Instances->SetCanEverAffectNavigation(false);
     Instances->SetCastShadow(false);
-    Instances->bReceivesDecals = false;
+    Instances->SetReceivesDecals(false);
 }
 
 AAlphaCombatEffect* AAlphaCombatEffect::Spawn(UWorld* World, const FVector& Location,
     const FVector& Forward, EAlphaEffectType Type, FLinearColor Color, bool bEmpowered)
+{
+    return SpawnInternal(World, Location, Forward, Type, Color, bEmpowered, 0, false);
+}
+
+AAlphaCombatEffect* AAlphaCombatEffect::SpawnCombo(UWorld* World, const FVector& Location,
+    const FVector& Forward, int32 Stage, bool bAirborne, FLinearColor Color)
+{
+    if (Stage < 1 || Stage > 5) return nullptr;
+    return SpawnInternal(World, Location, Forward, EAlphaEffectType::Combo, Color, false, Stage, bAirborne);
+}
+
+AAlphaCombatEffect* AAlphaCombatEffect::SpawnInternal(UWorld* World, const FVector& Location,
+    const FVector& Forward, EAlphaEffectType Type, FLinearColor Color, bool bEmpowered, int32 Stage, bool bAirborne)
 {
     if (!World || World->GetNetMode() == NM_DedicatedServer || Location.ContainsNaN() || Forward.ContainsNaN()) return nullptr;
     if (const APlayerController* Player = World->GetFirstPlayerController())
@@ -73,7 +88,7 @@ AAlphaCombatEffect* AAlphaCombatEffect::Spawn(UWorld* World, const FVector& Loca
     Params.ObjectFlags |= RF_Transient;
     AAlphaCombatEffect* Effect = World->SpawnActor<AAlphaCombatEffect>(Location, Facing.Rotation(), Params);
     if (!Effect) return nullptr;
-    Effect->Configure(Type, Color, bEmpowered);
+    Effect->Configure(Type, Color, bEmpowered, Stage, bAirborne);
     if (Effect->Pieces.IsEmpty())
     {
         Effect->Destroy();
@@ -88,7 +103,8 @@ int32 AAlphaCombatEffect::Priority() const
     return EffectPriority(EffectType);
 }
 
-void AAlphaCombatEffect::Configure(EAlphaEffectType InType, FLinearColor Color, bool bEmpowered)
+void AAlphaCombatEffect::Configure(EAlphaEffectType InType, FLinearColor Color, bool bEmpowered,
+    int32 Stage, bool bAirborne)
 {
     EffectType = InType;
     Pieces.Reserve(MaxInstances);
@@ -102,6 +118,35 @@ void AAlphaCombatEffect::Configure(EAlphaEffectType InType, FLinearColor Color, 
 
     switch (EffectType)
     {
+    case EAlphaEffectType::Combo:
+        ConfigureCombo(Stage, bAirborne);
+        break;
+    case EAlphaEffectType::Sprint:
+        Duration = .26f;
+        // These are foot-level wind/dust streaks, not a defensive or damaging volume.
+        for (int32 Index = 0; Index < 6; ++Index)
+        {
+            const float Side = (Index % 2 ? 1.0f : -1.0f) * (16.0f + Index * 2.0f);
+            const float Height = 3.0f + (Index % 3) * 5.0f;
+            AddBeam(FVector(-12, Side, Height), FVector(-48 - Index * 7, Side, Height),
+                2.0f, FVector(-35, Side * .3f, 5.0f));
+        }
+        break;
+    case EAlphaEffectType::Ultimate:
+        Duration = .72f;
+        // Shared conservative footprint: Shen's rear radius is 180 and A Ling's
+        // radial ultimate is 300. Keep the ring at 150 and every forward tip < 280.
+        AddRing(14, 150.0f, -55.0f, 5.0f, .25f, 1.0f);
+        for (int32 Index = 0; Index < 8; ++Index)
+        {
+            const float AngleA = FMath::Lerp(-1.1f, 1.1f, static_cast<float>(Index) / 8.0f);
+            const float AngleB = FMath::Lerp(-1.1f, 1.1f, static_cast<float>(Index + 1) / 8.0f);
+            AddBeam(FVector(145 + FMath::Cos(AngleA) * 125, -10, FMath::Sin(AngleA) * 65),
+                FVector(145 + FMath::Cos(AngleB) * 125, -10, FMath::Sin(AngleB) * 65), 7.0f);
+        }
+        AddBeam(FVector(75, -25, -20), FVector(95, -25, 40), 4.0f);
+        AddBeam(FVector(125, 25, -20), FVector(145, 25, 40), 4.0f);
+        break;
     case EAlphaEffectType::Slash:
     case EAlphaEffectType::HeavySlash:
     {
@@ -184,6 +229,68 @@ void AAlphaCombatEffect::Configure(EAlphaEffectType InType, FLinearColor Color, 
     UpdatePieces(0.0f);
 }
 
+void AAlphaCombatEffect::ConfigureCombo(int32 Stage, bool bAirborne)
+{
+    const AlphaPlayerControl::ComboAttackData Data = AlphaPlayerControl::GetComboAttack(Stage, bAirborne);
+    Duration = static_cast<float>(FMath::Max(.08, Data.Duration - Data.Windup));
+    const float Reach = static_cast<float>(Data.Reach);
+    const float Width = static_cast<float>(Data.HalfWidth);
+    const float Height = static_cast<float>(Data.HalfHeight);
+    const float Z = static_cast<float>(Data.VerticalOffset);
+    if (Stage == 4)
+    {
+        // A narrow thrust rather than a wide slash; all pieces stay inside the
+        // shared forward box and remain still in local space after release.
+        AddBeam(FVector(12, -8, Z), FVector(Reach - 10, -8, Z), 5.0f);
+        AddBeam(FVector(28, 8, Z - 10), FVector(Reach - 30, 8, Z - 10), 2.5f);
+        AddBeam(FVector(Reach - 45, -18, Z - 12), FVector(Reach - 12, -8, Z), 3.0f);
+        AddBeam(FVector(Reach - 45, 2, Z + 12), FVector(Reach - 12, -8, Z), 3.0f);
+        return;
+    }
+    if (Stage == 5)
+    {
+        // Ground/air finishers both strike a finite box. This local down-pulse
+        // follows that box instead of projecting a full circle around the pawn.
+        const float Radius = FMath::Min(Width * .7f, Reach * .3f);
+        const float Center = Reach * .5f;
+        const float Bottom = Z - Height * .7f;
+        for (int32 Index = 0; Index < 16; ++Index)
+        {
+            const float A = Index * 2.0f * PI / 16.0f;
+            const float B = (Index + 1) * 2.0f * PI / 16.0f;
+            AddBeam(FVector(Center + FMath::Cos(A) * Radius, FMath::Sin(A) * Radius, Bottom),
+                FVector(Center + FMath::Cos(B) * Radius, FMath::Sin(B) * Radius, Bottom), 4.0f);
+        }
+        for (int32 Index = 0; Index < 4; ++Index)
+        {
+            const float X = Center - 24.0f + Index * 16.0f;
+            AddBeam(FVector(X, -8, Z + Height * .65f), FVector(X + 8, -8, Bottom + 8), 4.0f);
+        }
+        return;
+    }
+    const int32 Segments = 18;
+    for (int32 Index = 0; Index < Segments; ++Index)
+    {
+        const float Sign = Stage == 2 ? -1.0f : 1.0f;
+        const float A = Sign * FMath::Lerp(-1.15f, 1.15f, static_cast<float>(Index) / Segments);
+        const float B = Sign * FMath::Lerp(-1.15f, 1.15f, static_cast<float>(Index + 1) / Segments);
+        FVector Start, End;
+        if (Stage == 3)
+        {
+            Start = FVector(Reach * .4f + FMath::Cos(A) * Reach * .35f, -8, Z + FMath::Sin(A) * Height * .72f);
+            End = FVector(Reach * .4f + FMath::Cos(B) * Reach * .35f, -8, Z + FMath::Sin(B) * Height * .72f);
+        }
+        else
+        {
+            Start = FVector(Reach * .45f + FMath::Cos(A) * Reach * .43f, FMath::Sin(A) * Width * .8f, Z);
+            End = FVector(Reach * .45f + FMath::Cos(B) * Reach * .43f, FMath::Sin(B) * Width * .8f, Z);
+        }
+        AddBeam(Start, End, Stage == 3 ? 4.0f : 3.5f);
+        // A moving trail reads the reverse cut without changing hit detection.
+        if (!Pieces.IsEmpty()) Pieces.Last().DelayFraction = static_cast<float>(Index) / Segments * .3f;
+    }
+}
+
 void AAlphaCombatEffect::AddBeam(const FVector& Start, const FVector& End, float Thickness,
     const FVector& Drift, float RadialStart, float RadialEnd)
 {
@@ -233,12 +340,17 @@ void AAlphaCombatEffect::UpdatePieces(float Progress)
     for (int32 Index = 0; Index < Pieces.Num(); ++Index)
     {
         const FPiece& Piece = Pieces[Index];
-        const float RadialScale = FMath::Lerp(Piece.RadialStart, Piece.RadialEnd, Ease);
+        const bool bVisible = Progress >= Piece.DelayFraction;
+        const float LocalProgress = FMath::Clamp((Progress - Piece.DelayFraction) / (1.0f - Piece.DelayFraction), 0.0f, 1.0f);
+        const float LocalEase = 1.0f - FMath::Square(1.0f - LocalProgress);
+        const float LocalDissolve = Piece.DelayFraction > 0.0f
+            ? static_cast<float>(AlphaPresentation::EffectEnvelope(LocalProgress, 1.0)) : Dissolve;
+        const float RadialScale = FMath::Lerp(Piece.RadialStart, Piece.RadialEnd, LocalEase);
         FVector Position = Piece.Start;
         Position.X *= RadialScale;
         Position.Y *= RadialScale;
-        Position += Piece.Drift * Ease;
-        FVector Scale = Piece.Scale * FMath::Max(.005f, Dissolve);
+        Position += Piece.Drift * LocalEase;
+        FVector Scale = Piece.Scale * (bVisible ? FMath::Max(.005f, LocalDissolve) : 0.0f);
         if (Piece.RadialStart != Piece.RadialEnd) Scale.X *= RadialScale;
         Instances->UpdateInstanceTransform(Index, FTransform(Piece.Rotation, Position, Scale), false,
             Index == Pieces.Num() - 1, true);

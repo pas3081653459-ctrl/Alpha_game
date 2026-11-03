@@ -56,14 +56,14 @@ bool FAlphaForgeScalingPhaseTest::RunTest(const FString& Parameters)
     }
     Boss->ConfigureForPlayers(3);
     UAlphaCombatComponent* Combat = Boss->GetCombatComponent();
-    TestEqual(TEXT("Three-player boss has scaled maximum health"), Combat->GetMaxHealth(), 1200.f);
+    TestEqual(TEXT("Three-player boss has scaled maximum health"), Combat->GetMaxHealth(), 720.f);
     TestEqual(TEXT("Boss begins in phase one"), Boss->GetBossPhase(), 1);
-    Combat->ReceiveHit(650.f, 0.f, nullptr);
+    Combat->ReceiveHit(400.f, 0.f, nullptr);
     Boss->Tick(.016f);
     TestEqual(TEXT("Crossing half health activates phase two"), Boss->GetBossPhase(), 2);
     Boss->ConfigureForPlayers(1);
-    TestEqual(TEXT("A second player-count update cannot heal or rescale a live boss"), Combat->GetHealth(), 550.f);
-    TestEqual(TEXT("Live maximum health remains fixed after a disconnect"), Combat->GetMaxHealth(), 1200.f);
+    TestEqual(TEXT("A second player-count update cannot heal or rescale a live boss"), Combat->GetHealth(), 320.f);
+    TestEqual(TEXT("Live maximum health remains fixed after a disconnect"), Combat->GetMaxHealth(), 720.f);
     Combat->ReceiveHit(10000.f, 0.f, nullptr);
     TestFalse(TEXT("Boss can actually be defeated through authority damage"), Combat->IsAlive());
     World->DestroyWorld(false);

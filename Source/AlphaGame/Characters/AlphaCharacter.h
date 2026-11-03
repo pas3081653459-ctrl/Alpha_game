@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "TimerManager.h"
+#include "Rules/PlayerControlRules.h"
 #include "AlphaCharacter.generated.h"
 
 class UAlphaCombatComponent;
@@ -22,6 +23,7 @@ public:
     AAlphaCharacter();
 
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
+    virtual void Tick(float DeltaSeconds) override;
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
     UFUNCTION(BlueprintPure, Category = "Combat")
@@ -55,6 +57,20 @@ public:
 
     /** Authority-side roster membership; disconnected or unpossessed pawns are excluded. */
     bool IsCoopParticipant() const;
+
+    UFUNCTION(BlueprintPure, Category = "Movement")
+    bool IsSprinting() const;
+
+    UFUNCTION(BlueprintPure, Category = "Movement")
+    float GetBaseWalkSpeed() const { return BaseWalkSpeed; }
+
+    UFUNCTION(BlueprintCallable, Category = "Movement")
+    void StopSprint();
+
+    /** Pure XY facing intent; no position or velocity is accepted from clients. Also used by authority AI. */
+    void FaceMoveIntent(const FVector& XYIntent);
+    void BeginAirComboHold();
+    void EndAirComboHold();
 
 protected:
     virtual void BeginPlay() override;
@@ -90,7 +106,7 @@ protected:
     UFUNCTION()
     virtual void HandleDeath();
 
-    /** Yaw remains along the lane even while the pawn moves in depth. */
+    /** Compatibility helper for existing lane-based callers. */
     void FaceAlongLane(float Direction);
 
 private:
@@ -105,13 +121,60 @@ private:
     void EndRevive();
     void Skill1();
     void Skill2();
+    void Skill3();
     bool IsMenuBlockingActions() const;
+
+    void DirectionDPressed();
+    void DirectionDReleased();
+    void DirectionAPressed();
+    void DirectionAReleased();
+    void DirectionWPressed();
+    void DirectionWReleased();
+    void DirectionSPressed();
+    void DirectionSReleased();
+    void HandleDirectionKey(int32 KeyIndex, bool bPressed);
+    void ProcessDirectionKey(int32 KeyIndex, bool bPressed, bool bAuthorityState);
+    void SetSprintState(bool bEnabled, int32 KeyIndex);
+    void RefreshSprintSpeed();
+    void ResetTapHistory(bool bAuthorityState);
+    void AcknowledgeSprintState();
+    void UpdateMoveFacing();
+    void ApplyAirComboHold();
+    void AirComboHoldExpired();
+    void CancelAirComboForAction();
+
+    UFUNCTION(Server, Reliable)
+    void ServerDirectionKey(int32 KeyIndex, bool bPressed);
+
+    UFUNCTION(Server, Reliable)
+    void ServerStopSprint();
+
+    UFUNCTION(Server, Reliable)
+    void ServerCancelAirCombo();
+
+    UFUNCTION()
+    void OnRep_SprintState();
+
+    UFUNCTION()
+    void OnRep_AirComboHeld();
+
+    UFUNCTION()
+    void HandleAirComboChanged(bool bHolding);
+
+    UFUNCTION()
+    void HandleComboFinished();
+
+    UFUNCTION()
+    void ShowCombo(int32 Stage, bool bAirborne);
 
     UFUNCTION(Server, Reliable)
     void ServerDodge();
 
+    UFUNCTION(NetMulticast, Reliable)
+    void MulticastRoll(FVector Facing);
+
     UFUNCTION(Server, Reliable)
-    void ServerSetFacing(bool bFaceRight);
+    void ServerSetFacing(FVector XYIntent);
 
     UFUNCTION()
     void OnRep_Defeated();
@@ -149,9 +212,32 @@ private:
 
     FTimerHandle WeaponFeedbackTimer;
     FTimerHandle PoiseFeedbackTimer;
+    FTimerHandle AirComboHoldTimer;
     FLinearColor TeamColor;
 
     double LastDodgeTime = -1000.0;
     double LastFacingRequestTime = -1000.0;
-    bool bLastRequestedFacingRight = true;
+    double VisualFacingLockedUntil = 0.0;
+    FVector LastRequestedFacing = FVector::ForwardVector;
+    FVector MoveInputIntent = FVector::ZeroVector;
+    float BaseWalkSpeed = 480.0f;
+
+    UPROPERTY(ReplicatedUsing = OnRep_SprintState)
+    bool bSprinting = false;
+
+    UPROPERTY(ReplicatedUsing = OnRep_SprintState)
+    int32 SprintRevision = 0;
+
+    UPROPERTY(Replicated)
+    int32 SprintKey = -1;
+
+    UPROPERTY(ReplicatedUsing = OnRep_AirComboHeld)
+    bool bAirComboHeld = false;
+
+    bool bPredictedSprinting = false;
+    int32 PredictedSprintKey = -1;
+    AlphaPlayerControl::TapState LocalTapStates[4];
+    AlphaPlayerControl::TapState AuthorityTapStates[4];
+    float SavedGravityScale = 1.0f;
+    bool bSavedGravity = false;
 };

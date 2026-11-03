@@ -15,6 +15,7 @@ public:
     virtual void Tick(float DeltaSeconds) override;
 
 protected:
+    virtual void BeginPlay() override;
     virtual void HandleDeath() override;
 
     UPROPERTY(EditDefaultsOnly, Category = "AI", meta = (ClampMin = "0.0"))

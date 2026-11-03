@@ -28,3 +28,7 @@ jobs:
         run: python3 Scripts/run_companion_tests.py --sanitize
       - name: Check tracked whitespace
         run: git diff --check HEAD
+      - name: Compile and run player-control rules
+        run: python3 Scripts/run_player_control_tests.py
+      - name: Check undefined behavior in player-control rules
+        run: python3 Scripts/run_player_control_tests.py --sanitize

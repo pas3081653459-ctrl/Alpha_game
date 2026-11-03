@@ -12,10 +12,16 @@ AAlphaEnemy::AAlphaEnemy()
     Tags.Remove(TEXT("Player"));
     Tags.AddUnique(TEXT("Enemy"));
     CombatComponent->TeamId = 2;
-    GetCharacterMovement()->MaxWalkSpeed = 250.0f;
+    GetCharacterMovement()->MaxWalkSpeed = 210.0f;
     PrototypeBody->SetRelativeScale3D(FVector(0.7f, 0.7f, 1.25f));
     AIControllerClass = AAIController::StaticClass();
     AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
+}
+
+void AAlphaEnemy::BeginPlay()
+{
+    Super::BeginPlay();
+    if (HasAuthority()) CombatComponent->ConfigureEnemyProfile();
 }
 
 void AAlphaEnemy::FindTarget()
@@ -49,12 +55,13 @@ void AAlphaEnemy::Tick(float DeltaSeconds)
     if (!Target.IsValid()) return;
 
     const FVector Delta = Target->GetActorLocation() - GetActorLocation();
-    FaceAlongLane(Delta.X);
-    const bool bInReach = FMath::Abs(Delta.X) <= AttackDistance
-        && FMath::Abs(Delta.Y) <= AttackDepthTolerance
+    FaceMoveIntent(Delta);
+    const bool bInReach = FMath::Abs(FVector::DotProduct(Delta, GetActorForwardVector())) <= AttackDistance
+        && FMath::Abs(FVector::DotProduct(Delta, GetActorRightVector())) <= AttackDepthTolerance
         && FMath::Abs(Delta.Z) <= 100.0f;
     if (bInReach)
     {
+        GetCharacterMovement()->StopMovementImmediately();
         CombatComponent->TryAttack(false);
     }
     else
