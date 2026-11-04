@@ -1,0 +1,9 @@
+# 怪物攻击特效
+
+近战攻击由CombatComponent的实际ReleaseAttack广播无伤害的释放通知；刀兵/盾兵只在该通知后生成特效。起手动画不生成刀光，取消或不能行动时不会发送释放事件。枪手使用ResolveGunnerShot、Boss使用ResolveAttack的服务器释放事件，向各端发送无可靠cosmetic multicast；视觉丢包不会影响服务器伤害。旧动画定时刀光、旧枪口Hit和短枪线已移除，保留前摇危险线。
+
+六种释放表现：刀兵弧光/火星、盾兵短震波/地爆、枪手枪焰/弹道、Boss横扫弧光、火线、锤击爆炸/碎石/烟尘。枪手视觉枪口从现有武器根变换取得，弹道终点仍对齐已锁定的攻击方向；视觉不会修改实际伤害线。锤击/盾击向WorldStatic射线确认地面并按法线对齐，火线逐段寻找真实地面；无地面时不生成接触爆炸。前摇预警与伤害范围沿用既有权威规则。
+
+特效沿用AAlphaCombatEffect：同一世界最多24个效果actor，每actor最多24组实体片段及其亮芯，新增最多2张Masked Unlit贴图卡片。卡片朝向本地摄像机，随生命周期更新Fade/Glow，无碰撞/阴影；专用服务器不生成视觉actor。最长新增生命周期0.8秒（另有0.2秒清理余量），预算不足时按既有优先级丢弃/替换效果。未在GPU或三人实机上测量性能。
+
+贴图缺失时保留几何效果；模型缺失时原怪物造型回退。源图是SourceArt/MonsterEffects/T_MonsterEffects.png，导入由create_monster_effect_assets.py完成，主构建及Editor启动已接入。源码检查与可移植规则通过不等于UE材质、网络事件时序与实际游戏画面验收；需按MONSTER_ART.md做打断、反向开枪、坡面Boss和三人混战实测。

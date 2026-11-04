@@ -6,6 +6,7 @@
 
 class UInstancedStaticMeshComponent;
 class UMaterialInstanceDynamic;
+class UStaticMeshComponent;
 
 UENUM()
 enum class EAlphaEffectType : uint8
@@ -23,7 +24,8 @@ enum class EAlphaEffectType : uint8
     Combo,
     Sprint,
     Ultimate,
-    GroundImpact
+    GroundImpact,
+    MonsterAttack
 };
 
 /** Bounded, local-only mesh effects. No gameplay, collision, replication or transparent overdraw. */
@@ -49,6 +51,11 @@ public:
     static AAlphaCombatEffect* SpawnGroundImpact(UWorld* World, const FVector& Location,
         const FVector& Normal, const FVector& Forward, float Radius, FLinearColor Color);
 
+    /** 0 blade, 1 shield, 2 gun, 3 boss sweep, 4 fire line, 5 hammer; release-only cosmetic. */
+    static AAlphaCombatEffect* SpawnMonsterAttack(UWorld* World, const FVector& Location,
+        const FVector& Forward, int32 Attack);
+    static AAlphaCombatEffect* SpawnMonsterShot(UWorld* World, const FVector& Muzzle, const FVector& End);
+
 protected:
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
@@ -71,6 +78,10 @@ private:
     void ConfigureCombo(int32 Stage, bool bAirborne);
     void ConfigureGroundImpact(float Radius);
     void ConfigureSkill(int32 Archetype, int32 Slot);
+    void ConfigureMonsterAttack(int32 Attack);
+    FVector SurfacePoint(const FVector& Local, float Lift) const;
+    void AddMonsterCard(const TCHAR* MaterialName, const FVector& Position, float Width, float Height);
+    void UpdateMonsterCards(float Progress);
     void AddBeam(const FVector& Start, const FVector& End, float Thickness,
         const FVector& Drift = FVector::ZeroVector, float RadialStart = 1.0f, float RadialEnd = 1.0f);
     void AddRing(int32 Segments, float Radius, float Height, float Thickness, float StartScale, float EndScale);
@@ -90,6 +101,8 @@ private:
     UPROPERTY(Transient)
     TObjectPtr<UMaterialInstanceDynamic> CoreMaterial;
 
+    UPROPERTY(Transient) TArray<TObjectPtr<UStaticMeshComponent>> MonsterCards;
+    TArray<FVector> MonsterCardScales;
     TArray<FPiece> Pieces;
     EAlphaEffectType EffectType = EAlphaEffectType::Hit;
     float Age = 0.0f;

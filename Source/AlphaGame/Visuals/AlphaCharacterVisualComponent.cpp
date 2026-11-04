@@ -137,8 +137,6 @@ void UAlphaCharacterVisualComponent::ClearParts()
     ShieldMaterial = nullptr;
     bEnemyWindingUp = false;
     bShieldGuarding = bLastShieldGuarding = false;
-    bObservedEnemyShotRevision = false;
-    EnemyShotVisibleUntil = -1000.;
     ClothMaterial = MetalMaterial = AccentMaterial = FaceMaterial = GlowMaterial = nullptr;
 }
 
@@ -157,11 +155,14 @@ void UAlphaCharacterVisualComponent::RefreshAppearance(int32 Hero, bool bEnemy, 
         : (EnemyRole == 1 ? FLinearColor(.85f, .32f, .07f) : FLinearColor(0.85f, 0.22f, 0.035f)))
         : (HeroType == 0 ? FLinearColor(0.6f, 0.025f, 0.055f)
         : (HeroType == 1 ? FLinearColor(0.025f, 0.5f, 0.42f) : FLinearColor(0.75f, 0.52f, 0.13f)));
-    ClothMaterial = MakeMaterial(bEnemyVisual ? Accent * .45f : Accent * 0.7f, 0.02f, 0.78f);
-    MetalMaterial = MakeMaterial(FLinearColor(.23f, .3f, .38f), .25f, .55f);
+    const FLinearColor ClothTint = bEnemyVisual && EnemyRole == 2 && !bBossVisual
+        ? FLinearColor(.06f, .10f, .24f) : Accent * (bEnemyVisual ? .72f : .7f);
+    ClothMaterial = MakeMaterial(ClothTint, 0.02f, 0.78f);
+    MetalMaterial = MakeMaterial(bEnemyVisual ? FLinearColor(.38f, .43f, .51f) : FLinearColor(.23f, .3f, .38f), .25f, .55f);
     AccentMaterial = MakeMaterial(Accent, bEnemyVisual ? 0.65f : 0.35f, 0.42f);
-    FaceMaterial = MakeMaterial(bEnemyVisual ? FLinearColor(0.74f, 0.67f, 0.49f) : FLinearColor(0.9f, 0.68f, 0.52f), 0.08f, 0.7f);
-    GlowMaterial = MakeMaterial(bEnemyVisual ? FLinearColor(1.0f, 0.19f, 0.02f) : Accent * 1.6f, 0.2f, 0.3f, bBossVisual ? 4.0f : 2.2f);
+    FaceMaterial = MakeMaterial(bEnemyVisual ? FLinearColor(.84f, .77f, .62f) : FLinearColor(0.9f, 0.68f, 0.52f), 0.08f, 0.7f);
+    GlowMaterial = MakeMaterial(bEnemyVisual ? (EnemyRole == 2 && !bBossVisual ? FLinearColor(.08f, .65f, 1.f)
+        : FLinearColor(1.0f, 0.19f, 0.02f)) : Accent * 1.6f, 0.2f, 0.3f, bBossVisual ? 4.0f : 2.2f);
     // Keep skin and energy clean; only garments receive restrained woven detail.
     for (UMaterialInstanceDynamic* Garment : {ClothMaterial.Get(), AccentMaterial.Get()})
     {
@@ -170,8 +171,9 @@ void UAlphaCharacterVisualComponent::RefreshAppearance(int32 Hero, bool bEnemy, 
         Garment->SetScalarParameterValue(TEXT("TextureStrength"), .18f);
     }
     const bool bAuthoredHero = !bEnemyVisual && BuildAuthoredHero();
-    if (!bAuthoredHero) BuildSilhouette();
-    BuildWeapon();
+    const bool bAuthoredMonster = bEnemyVisual && BuildAuthoredMonster();
+    if (!bAuthoredHero && !bAuthoredMonster) BuildSilhouette();
+    if (!bAuthoredMonster) BuildWeapon();
     if (Enemy && !bBossVisual) BuildEnemyTell();
     if (!bEnemyVisual && !bAuthoredHero) BuildAnimeDetails();
     SkillStartedAt = -1000.0;
@@ -211,7 +213,7 @@ UStaticMeshComponent* UAlphaCharacterVisualComponent::AddAuthoredPart(UStaticMes
         {
             if (!Ink)
             {
-                const bool bHair = Mesh->GetName().EndsWith(TEXT("_Hair"));
+                const bool bHair = !bEnemyVisual && Mesh->GetName().EndsWith(TEXT("_Hair"));
                 const FLinearColor HairTint = HeroType == 2 ? FLinearColor(.72f, .53f, .32f)
                     : (HeroType == 1 ? FLinearColor(.025f, .13f, .14f) : FLinearColor(.035f, .045f, .09f));
                 Ink = MakeMaterial(bHair ? HairTint : FLinearColor(.014f, .019f, .035f), 0.f, .85f);
@@ -254,6 +256,60 @@ bool UAlphaCharacterVisualComponent::BuildAuthoredHero()
     USceneComponent* Parents[] = {BodyRoot.Get(), BodyRoot.Get(), BodyRoot.Get(), LeftArm.Get(),
         RightArm.Get(), LeftLeg.Get(), RightLeg.Get()};
     for (int32 Index = 0; Index < 7; ++Index) AddAuthoredPart(Meshes[Index], Parents[Index], FVector::ZeroVector);
+    return true;
+}
+
+bool UAlphaCharacterVisualComponent::BuildAuthoredMonster()
+{
+    const int32 Monster = bBossVisual ? 3 : FMath::Clamp(EnemyRole, 0, 2);
+    static const TCHAR* Names[] = {TEXT("Body"), TEXT("Head"), TEXT("Hair"), TEXT("LeftArm"),
+        TEXT("RightArm"), TEXT("LeftLeg"), TEXT("RightLeg"), TEXT("Weapon")};
+    UStaticMesh* Meshes[8] = {};
+    UStaticMesh* Shield = nullptr;
+    const auto LoadPart = [Monster](const TCHAR* Part) -> UStaticMesh*
+    {
+        const FString Name = FString::Printf(TEXT("SM_AlphaMonster%d_%s"), Monster, Part);
+        return LoadObject<UStaticMesh>(nullptr,
+            *FString::Printf(TEXT("/Game/Art/Monsters/Generated/%s.%s"), *Name, *Name));
+    };
+    // Preflight the weapon and shield as well as the body. A partial import must
+    // produce one complete fallback, never a new body holding an invisible weapon.
+    for (int32 Index = 0; Index < 8; ++Index)
+    {
+        Meshes[Index] = LoadPart(Names[Index]);
+        if (!Meshes[Index])
+        {
+            UE_LOG(LogTemp, Warning, TEXT("AlphaGame monster %d missing %s. Run the Art build; using complete prototype model."), Monster, Names[Index]);
+            return false;
+        }
+    }
+    if (Monster == 1)
+    {
+        Shield = LoadPart(TEXT("Shield"));
+        if (!Shield)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("AlphaGame shield monster art missing. Run the Art build; using complete prototype model."));
+            return false;
+        }
+    }
+    LeftArm = AddPivot(TEXT("ArtLeftArm"), BodyRoot, FVector(0, -24, 34));
+    RightArm = AddPivot(TEXT("ArtRightArm"), BodyRoot, FVector(0, 24, 34));
+    LeftLeg = AddPivot(TEXT("ArtLeftLeg"), BodyRoot, FVector(0, -12, -29));
+    RightLeg = AddPivot(TEXT("ArtRightLeg"), BodyRoot, FVector(0, 12, -29));
+    USceneComponent* Parents[] = {BodyRoot.Get(), BodyRoot.Get(), BodyRoot.Get(), LeftArm.Get(),
+        RightArm.Get(), LeftLeg.Get(), RightLeg.Get(), WeaponRoot.Get()};
+    for (int32 Index = 0; Index < 8; ++Index)
+        AddAuthoredPart(Meshes[Index], Parents[Index], FVector::ZeroVector);
+    if (Shield)
+    {
+        ShieldFace = AddAuthoredPart(Shield, BodyRoot, FVector(34, -20, 0));
+        ShieldMaterial = MakeMaterial(FLinearColor(.8f, .36f, .09f), .15f, .6f);
+        // Guard feedback tints the armor inset; preserve the shield's metal edge
+        // and dark engravings instead of collapsing every slot to one color.
+        const TArray<FName> Slots = ShieldFace->GetMaterialSlotNames();
+        for (int32 Index = 0; Index < Slots.Num(); ++Index)
+            if (Slots[Index] == TEXT("Accent")) ShieldFace->SetMaterial(Index, ShieldMaterial);
+    }
     return true;
 }
 
@@ -424,6 +480,16 @@ void UAlphaCharacterVisualComponent::PausePoseForImpact(float Seconds)
     UpdateTickBudget();
 }
 
+FVector UAlphaCharacterVisualComponent::GetMonsterMuzzleLocation() const
+{
+    // Both the authored gun and the complete prototype fallback end at local X125.
+    // TransformPosition includes current weapon pose and cosmetic root scale.
+    if (IsValid(WeaponRoot.Get()))
+        return WeaponRoot->GetComponentTransform().TransformPosition(FVector(125.f, 0.f, 0.f));
+    const AActor* Owner = GetOwner();
+    return Owner ? Owner->GetActorLocation() + Owner->GetActorForwardVector() * 100.f : FVector::ZeroVector;
+}
+
 void UAlphaCharacterVisualComponent::BuildEnemyTell()
 {
     if (EnemyRole != 2 || !GetOwner() || GetWorld()->GetNetMode() == NM_DedicatedServer) return;
@@ -451,24 +517,14 @@ void UAlphaCharacterVisualComponent::UpdateEnemyPresentation()
     const AAlphaEnemy* Enemy = Cast<AAlphaEnemy>(GetOwner());
     if (!Enemy || bBossVisual) return;
     bShieldGuarding = EnemyRole == 1 && Enemy->IsGuardActive();
-    const int32 ShotRevision = Enemy->GetShotRevision();
-    if (bObservedEnemyShotRevision && ShotRevision != LastEnemyShotRevision && EnemyRole == 2)
-    {
-        EnemyShotVisibleUntil = VisualTime() + .10;
-        const FVector Muzzle = WeaponRoot ? WeaponRoot->GetComponentLocation() + WeaponRoot->GetForwardVector()*125.
-            : GetOwner()->GetActorLocation();
-        AAlphaCombatEffect::Spawn(GetWorld(), Muzzle, Enemy->GetTellDirection(), EAlphaEffectType::Hit, FLinearColor(1.f,.55f,.08f));
-        AlphaAudio::Play(GetWorld(), Muzzle, EAlphaSoundCue::Skill, .55f);
-    }
-    LastEnemyShotRevision = ShotRevision;
-    bObservedEnemyShotRevision = true;
     const bool bWindup = EnemyRole == 2 && Enemy->GetTellState() == EAlphaEnemyTellState::Windup;
     bEnemyWindingUp = bWindup;
     EnemyTellProgress = bWindup ? FMath::Clamp(Enemy->GetTellProgress(), 0.f, 1.f) : 0.f;
     if (!EnemyTell) return;
-    const bool bShot = VisualTime() < EnemyShotVisibleUntil;
-    EnemyTell->SetVisibility((bWindup || bShot) && !bDefeatedVisual);
-    if (!bWindup && !bShot) return;
+    // Release flash, shot trail and audio are emitted by the authoritative
+    // release event. This replicated-state presentation is only the windup lane.
+    EnemyTell->SetVisibility(bWindup && !bDefeatedVisual);
+    if (!bWindup) return;
     FVector Start = Enemy->GetTellOrigin();
     FVector Forward = Enemy->GetTellDirection().GetSafeNormal2D();
     if (Forward.IsNearlyZero()) Forward = FVector::ForwardVector;
@@ -485,7 +541,7 @@ void UAlphaCharacterVisualComponent::UpdateEnemyPresentation()
         if (!AlphaLayoutRules::IsWalkable(Chapter,{Sample.X,Sample.Y})) { Length=FMath::Max(1.f,Distance-16.f); break; }
         Start.Z = FMath::Max(Start.Z, ChapterOrigin.Z + AlphaLayoutRules::SurfaceHeight(Chapter,{Sample.X,Sample.Y}) + 8.);
     }
-    const float Progress = bShot ? 1.f : EnemyTellProgress;
+    const float Progress = EnemyTellProgress;
     const auto Beam = [this](int32 Index, const FVector& A, const FVector& B, float Width)
     {
         const FVector Delta = B - A;
@@ -497,18 +553,18 @@ void UAlphaCharacterVisualComponent::UpdateEnemyPresentation()
     Beam(1, Start+Side*HalfWidth, Start+Forward*Length+Side*HalfWidth, 4.f);
     Beam(2, Start-Side*HalfWidth, Start+Side*HalfWidth, 4.f);
     Beam(3, Start+Forward*Length-Side*HalfWidth, Start+Forward*Length+Side*HalfWidth, 4.f);
-    Beam(4, Start, Start+Forward*FMath::Max(1.f,Length*Progress), bShot ? 8.f : 3.f);
+    Beam(4, Start, Start+Forward*FMath::Max(1.f,Length*Progress), 3.f);
     const FVector Tip=Start+Forward*(Length*.7f);
     Beam(5, Tip-Forward*30-Side*18, Tip, 4.f);
     Beam(6, Tip-Forward*30+Side*18, Tip, 4.f);
     Beam(7, Start-Side*12, Start+Side*12, 7.f);
     if (EnemyTellMaterial)
     {
-        const FLinearColor Color=bShot ? FLinearColor(1.f,.85f,.45f)
-            : FMath::Lerp(FLinearColor(1.f,.28f,.035f),FLinearColor(1.f,.72f,.12f),EnemyTellProgress);
+        const FLinearColor Color=FMath::Lerp(FLinearColor(1.f,.28f,.035f),
+            FLinearColor(1.f,.72f,.12f),EnemyTellProgress);
         EnemyTellMaterial->SetVectorParameterValue(TEXT("Tint"),Color);
         EnemyTellMaterial->SetVectorParameterValue(TEXT("Color"),Color);
-        EnemyTellMaterial->SetScalarParameterValue(TEXT("Glow"),bShot ? 1.f : .25f+EnemyTellProgress*.4f);
+        EnemyTellMaterial->SetScalarParameterValue(TEXT("Glow"),.25f+EnemyTellProgress*.4f);
     }
 }
 
@@ -864,15 +920,12 @@ void UAlphaCharacterVisualComponent::TickComponent(float DeltaTime, ELevelTick T
         if (RightArm) RightArm->SetRelativeRotation(FRotator(Pitch * 0.65f, 0, 0));
         if (!bBeforeImpact && !bAttackCueSpawned)
         {
-            // Boss range is defined by its replicated floor tell, never by an unrelated generic slash arc.
-            if (!bBossVisual)
+            // Enemy release effects come from authoritative release notifications.
+            // Keep this timer cosmetic-only so a canceled windup cannot show a strike.
+            if (!bEnemyVisual)
             {
-                if (bEnemyVisual)
-                    AAlphaCombatEffect::SpawnCombo(GetWorld(), GetOwner()->GetActorLocation(), GetOwner()->GetActorForwardVector(),
-                        1, false, FLinearColor(1.f, .25f, .04f));
-                else
-                    AAlphaCombatEffect::Spawn(GetWorld(), GetOwner()->GetActorLocation(), GetOwner()->GetActorForwardVector(),
-                        bHeavyAttack ? EAlphaEffectType::HeavySlash : EAlphaEffectType::Slash, BaseTints[2]);
+                AAlphaCombatEffect::Spawn(GetWorld(), GetOwner()->GetActorLocation(), GetOwner()->GetActorForwardVector(),
+                    bHeavyAttack ? EAlphaEffectType::HeavySlash : EAlphaEffectType::Slash, BaseTints[2]);
             }
             bAttackCueSpawned = true;
         }

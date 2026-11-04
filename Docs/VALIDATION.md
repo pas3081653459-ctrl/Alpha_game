@@ -6,7 +6,7 @@
 
 | 检查 | 结果 | 能证明什么 |
 |---|---|---|
-| `python3 Scripts/check_project.py` | 通过 | 工程描述、110 个必要文件、34 个头文件、输入与本地 include、入口配置；发现 46 项不同的 UE 测试名称 |
+| `python3 Scripts/check_project.py` | 通过 | 工程描述、150 个必要文件、34 个头文件、输入与本地 include、入口配置；发现 46 项不同的 UE 测试名称 |
 | `python3 Scripts/run_rules_tests.py` | 222/222 通过 | 实际共享规则在严格 C++17 编译器中的行为 |
 | `python3 Scripts/run_rules_tests.py --sanitize` | 222/222 通过，无 UBSan 报告 | 同一规则的未定义行为检查 |
 | `python3 Scripts/run_presentation_tests.py` / `--sanitize` | 各320/320通过 | 实际用于镜头距离、平滑、效果衰减的纯计算 |
@@ -141,3 +141,10 @@
 - 新增角色建模、背景导入、集成资源脚本及启动脚本Python语法通过，Mac构建包装bash语法通过。没有执行UE Python API或PowerShell。
 - 三视图与三行远景PNG已生成，校验图源SHA-256/尺寸；21个FBX真实文件存在，使用Git LFS分发。Blender模型导出/回导预览不等于UE渲染验证。
 - 实际坡面碰撞测试、三章AI移动、人物朝向/材质、背景构图、打包与LAN仍需UE实机。详见 `ANIME_MODELS_AND_VISTAS.md`。
+
+## 本轮怪物与攻击特效
+
+- 四套相关可移植测试：222+320+375+1174=2091项，正常及各自UBSan均通过。没有以此代替引擎释放时机和视觉验证。
+- 四类怪物33FBX由Blender导出/回导，官方parser独立核对节点identity、cm单位与manifest边界；三视图与RGBA特效atlas校验源hash/尺寸。
+- 资源脚本/报告更新revision2，期望63项保存资产，仍需实际UE Python导入执行。模型为分部低模，预览为Blender截图。
+- UE编译、实际释放/取消、shader/贴图朝向、坡面爆炸、打包性能及LAN待验收。详见 `MONSTER_ART.md` 和 `MONSTER_EFFECTS.md`。

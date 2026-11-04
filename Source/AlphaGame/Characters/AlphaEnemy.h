@@ -49,6 +49,8 @@ private:
     void BeginTacticalAttack();
     void UpdateTacticalAttack();
     void ResolveGunnerShot();
+    UFUNCTION() void ShowReleasedAttack(FVector Location, FVector Facing);
+    UFUNCTION(NetMulticast, Unreliable) void MulticastGunnerRelease(FVector Location, FVector Facing);
     void EnterRecovery(float Duration);
     double ServerTime() const;
     UFUNCTION() void OnRep_Role();

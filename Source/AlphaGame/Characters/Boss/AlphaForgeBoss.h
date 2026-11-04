@@ -58,6 +58,8 @@ private:
     AAlphaCharacter* FindClosestLivingPlayer() const;
     void BeginAttack(AAlphaCharacter* Target);
     void ResolveAttack();
+    UFUNCTION(NetMulticast, Unreliable)
+    void MulticastAttackRelease(uint8 ReleasedAttack, FVector Location, FVector Facing);
     void UpdateTelegraph();
     void AddTelegraphSegment(const FVector& A, const FVector& B, float Width = 5.f);
     double ServerTime() const;

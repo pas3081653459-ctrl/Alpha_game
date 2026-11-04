@@ -38,6 +38,9 @@ public:
     /** Cosmetic pose hold only; never changes world time or damage timers. */
     void PausePoseForImpact(float Seconds);
 
+    /** Cosmetic weapon tip only; never used to determine damage or aim. */
+    FVector GetMonsterMuzzleLocation() const;
+
     int32 GetVisiblePartCount() const { return Parts.Num(); }
 
 protected:
@@ -52,6 +55,7 @@ private:
     UMaterialInstanceDynamic* MakeMaterial(FLinearColor Tint, float Metallic, float Roughness, float Glow = 0.0f);
     void BuildSilhouette();
     bool BuildAuthoredHero();
+    bool BuildAuthoredMonster();
     UStaticMeshComponent* AddAuthoredPart(UStaticMesh* Mesh, USceneComponent* Parent, const FVector& Location);
     void BuildWeapon();
     void BuildAnimeDetails();
@@ -119,9 +123,6 @@ private:
     bool bLastShieldGuarding = false;
     float EnemyTellProgress = 0.f;
     double PosePausedUntil = -1000.;
-    int32 LastEnemyShotRevision = 0;
-    bool bObservedEnemyShotRevision = false;
-    double EnemyShotVisibleUntil = -1000.;
     bool bEnemyVisual = false;
     bool bBossVisual = false;
     bool bDefeatedVisual = false;

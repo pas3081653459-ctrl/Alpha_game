@@ -4,6 +4,10 @@
 #include "Rules/PresentationRules.h"
 #include "Rules/PlayerControlRules.h"
 #include "Rules/CompanionRules.h"
+#include "Rules/EnemyTacticsRules.h"
+#include "CollisionQueryParams.h"
+#include "Materials/MaterialInterface.h"
+#include "Components/StaticMeshComponent.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Engine/World.h"
@@ -20,6 +24,7 @@ int32 EffectPriority(EAlphaEffectType Type)
     if (Type == EAlphaEffectType::Revive) return 4;
     if (Type == EAlphaEffectType::Hit || Type == EAlphaEffectType::Poise) return 3;
     if (Type == EAlphaEffectType::Coop || Type == EAlphaEffectType::Ultimate || Type == EAlphaEffectType::GroundImpact) return 2;
+    if (Type == EAlphaEffectType::MonsterAttack) return 2;
     return 1;
 }
 }
@@ -161,6 +166,14 @@ void AAlphaCombatEffect::Configure(EAlphaEffectType InType, FLinearColor Color, 
         ConfigureSkill((Stage - 10) / 3, (Stage - 10) % 3);
         SetLifeSpan(Duration + .2f);
         UpdatePieces(0.0f);
+        return;
+    }
+    if (EffectType == EAlphaEffectType::MonsterAttack)
+    {
+        ConfigureMonsterAttack(Stage);
+        SetLifeSpan(Duration + .2f);
+        UpdatePieces(0.f);
+        UpdateMonsterCards(0.f);
         return;
     }
     switch (EffectType)
@@ -528,6 +541,7 @@ void AAlphaCombatEffect::Tick(float DeltaSeconds)
         return;
     }
     UpdatePieces(FMath::Clamp(Age / Duration, 0.0f, 1.0f));
+    UpdateMonsterCards(FMath::Clamp(Age / Duration, 0.0f, 1.0f));
 }
 
 void AAlphaCombatEffect::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -537,4 +551,180 @@ void AAlphaCombatEffect::EndPlay(const EEndPlayReason::Type EndPlayReason)
         return !Entry.IsValid() || Entry.Get() == this;
     });
     Super::EndPlay(EndPlayReason);
+}
+
+
+AAlphaCombatEffect* AAlphaCombatEffect::SpawnMonsterAttack(UWorld* World, const FVector& Location,
+    const FVector& Forward, int32 Attack)
+{
+    if (Attack < 0 || Attack > 5) return nullptr;
+    const FLinearColor Color = Attack == 2 ? FLinearColor(.08f, .65f, 1.f)
+        : (Attack == 1 ? FLinearColor(1.f, .62f, .12f) : FLinearColor(1.f, .19f, .035f));
+    return SpawnInternal(World, Location, Forward, EAlphaEffectType::MonsterAttack, Color, false, Attack, false);
+}
+
+FVector AAlphaCombatEffect::SurfacePoint(const FVector& Local, float Lift) const
+{
+    const FVector Position = GetActorTransform().TransformPosition(Local);
+    FCollisionObjectQueryParams Objects;
+    Objects.AddObjectTypesToQuery(ECC_WorldStatic);
+    FCollisionQueryParams Query(SCENE_QUERY_STAT(AlphaMonsterSurface), false, this);
+    FHitResult Hit;
+    if (GetWorld()->LineTraceSingleByObjectType(Hit, Position + FVector(0,0,600),
+        Position - FVector(0,0,800), Objects, Query) && Hit.ImpactNormal.Z >= .65f)
+        return GetActorTransform().InverseTransformPosition(Hit.ImpactPoint + Hit.ImpactNormal * Lift);
+    // Missing real floor must not conjure a contact explosion in empty air.
+    return FVector(Local.X, Local.Y, -2000.);
+}
+
+void AAlphaCombatEffect::ConfigureMonsterAttack(int32 Attack)
+{
+    Duration = Attack == 5 ? .8f : (Attack == 4 ? .62f : (Attack == 2 ? .2f : .32f));
+    if (Attack == 0 || Attack == 3)
+    {
+        const bool bBoss = Attack == 3;
+        const float Radius = bBoss ? 305.f : 135.f;
+        const int32 Segments = 18;
+        // A clean crescent at actual release, not a duplicate ground danger marker.
+        for (int32 I=0; I<Segments; ++I)
+        {
+            const float A = FMath::DegreesToRadians(-65.f + 130.f * I / Segments);
+            const float B = FMath::DegreesToRadians(-65.f + 130.f * (I+1) / Segments);
+            const float Z = bBoss ? 65.f : 0.f;
+            AddBeam(FVector(FMath::Cos(A)*Radius,FMath::Sin(A)*Radius,Z),
+                FVector(FMath::Cos(B)*Radius,FMath::Sin(B)*Radius,Z), bBoss ? 10.f : 6.f);
+            Pieces.Last().DelayFraction = I / static_cast<float>(Segments) * .12f;
+        }
+        AddSparks(6, 12.f, bBoss ? 100.f : 55.f, bBoss ? 65.f : 0.f, 701);
+        AddMonsterCard(TEXT("Slash"), FVector(bBoss ? 145.f : 65.f,0,bBoss ? 65.f : 0.f),
+            bBoss ? 480.f : 210.f, bBoss ? 180.f : 105.f);
+    }
+    else if (Attack == 1 || Attack == 5)
+    {
+        const FVector Contact = SurfacePoint(FVector(Attack == 1 ? 65.f : 0.f,0,0), 3.f);
+        if (Contact.Z < -1500.f) return;
+        // Spawn is already placed at the shared release origin. Re-anchor this
+        // actor to the traced floor so the shockwave never starts at pawn height.
+        const FVector ContactWorld = GetActorTransform().TransformPosition(Contact);
+        SetActorLocation(ContactWorld);
+        FCollisionObjectQueryParams FloorObjects;
+        FloorObjects.AddObjectTypesToQuery(ECC_WorldStatic);
+        FCollisionQueryParams FloorQuery(SCENE_QUERY_STAT(AlphaMonsterImpactNormal),false,this);
+        FHitResult FloorHit;
+        if (GetWorld()->LineTraceSingleByObjectType(FloorHit,ContactWorld+FVector(0,0,100),
+            ContactWorld-FVector(0,0,100),FloorObjects,FloorQuery))
+        {
+            const FVector Up=FloorHit.ImpactNormal.GetSafeNormal();
+            FVector Tangent=FVector::VectorPlaneProject(GetActorForwardVector(),Up).GetSafeNormal();
+            if (Tangent.IsNearlyZero()) Tangent=FVector::ForwardVector;
+            SetActorRotation(FRotationMatrix::MakeFromXZ(Tangent,Up).Rotator());
+        }
+        ConfigureGroundImpact(Attack == 5 ? 235.f : 82.f);
+        Duration = Attack == 5 ? .8f : .42f;
+        AddMonsterCard(TEXT("Impact"), FVector(0,0,Attack == 5 ? 75.f : 30.f),
+            Attack == 5 ? 420.f : 150.f, Attack == 5 ? 210.f : 95.f);
+        if (Attack == 5) AddMonsterCard(TEXT("Smoke"), FVector(0,12,110), 290.f, 180.f);
+    }
+    else if (Attack == 2)
+    {
+        FVector End(AlphaEnemyRules::GunnerLength,0,0);
+        FCollisionObjectQueryParams Objects;
+        Objects.AddObjectTypesToQuery(ECC_WorldStatic);
+        FCollisionQueryParams Query(SCENE_QUERY_STAT(AlphaMonsterBullet),false,this);
+        FHitResult Hit;
+        const FVector Target = GetActorTransform().TransformPosition(End);
+        if (GetWorld()->LineTraceSingleByObjectType(Hit, GetActorLocation(), Target, Objects, Query))
+            End = GetActorTransform().InverseTransformPosition(Hit.ImpactPoint);
+        AddBeam(FVector::ZeroVector, End, 3.f);
+        // Muzzle star is short and never masquerades as the gun's warning lane.
+        for (int32 I=0;I<8;++I)
+        {
+            const float A=I*PI/4.f;
+            AddBeam(FVector(6,0,0),FVector(22,FMath::Cos(A)*17,FMath::Sin(A)*17),3.f);
+        }
+        AddSparks(5,5,30,0,733);
+        AddMonsterCard(TEXT("Impact"), FVector(12,0,0), 65.f, 65.f);
+    }
+    else if (Attack == 4)
+    {
+        const int32 Sections = 6;
+        for (int32 I=0;I<Sections;++I)
+        {
+            const FVector Base = SurfacePoint(FVector(65.f+I*165.f,0,0), 5.f);
+            if (Base.Z < -1500.f) continue;
+            const float Height = 65.f + (I%2)*25.f;
+            AddBeam(Base + FVector(-24,-26,0),Base + FVector(0,-12,Height),9.f,FVector(0,0,20));
+            AddBeam(Base + FVector(24,26,0),Base + FVector(0,12,Height*.8f),7.f,FVector(0,0,15));
+            AddBeam(Base + FVector(-30,0,1),Base + FVector(30,0,1),5.f);
+            Pieces.Last().DelayFraction = I*.035f;
+        }
+        AddMonsterCard(TEXT("Fire"), SurfacePoint(FVector(285,0,0), 65.f), 460.f, 145.f);
+        AddMonsterCard(TEXT("Fire"), SurfacePoint(FVector(745,0,0), 65.f), 450.f, 145.f);
+    }
+}
+
+void AAlphaCombatEffect::AddMonsterCard(const TCHAR* MaterialName, const FVector& Position, float Width, float Height)
+{
+    if (MonsterCards.Num() >= 2 || Position.Z < -1500.f) return;
+    const FString Path = FString::Printf(TEXT("/Game/Art/MonsterEffects/M_%s.M_%s"),MaterialName,MaterialName);
+    UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr,*Path);
+    if (!Material) return; // Geometry remains usable before the optional art import.
+    UStaticMeshComponent* Card = NewObject<UStaticMeshComponent>(this);
+    AddInstanceComponent(Card);
+    Card->SetupAttachment(RootComponent);
+    Card->SetMobility(EComponentMobility::Movable);
+    Card->SetStaticMesh(AlphaArt::Mesh(EAlphaPrimitive::Plane));
+    Card->SetMaterial(0,Material);
+    Card->CreateDynamicMaterialInstance(0,Material);
+    Card->SetRelativeLocation(Position);
+    Card->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    Card->SetGenerateOverlapEvents(false);
+    Card->SetCanEverAffectNavigation(false);
+    Card->SetCastShadow(false);
+    Card->SetReceivesDecals(false);
+    Card->RegisterComponent();
+    MonsterCards.Add(Card);
+    MonsterCardScales.Add(FVector(Width/100.f,Height/100.f,1.f));
+}
+
+void AAlphaCombatEffect::UpdateMonsterCards(float Progress)
+{
+    if (MonsterCards.IsEmpty()) return;
+    APlayerController* Player = GetWorld()->GetFirstPlayerController();
+    if (!Player || !Player->PlayerCameraManager) return;
+    const FVector Right = Player->PlayerCameraManager->GetCameraRotation().RotateVector(FVector::RightVector);
+    for (int32 I=0;I<MonsterCards.Num();++I)
+    {
+        UStaticMeshComponent* Card=MonsterCards[I];
+        const FVector View=(Player->PlayerCameraManager->GetCameraLocation()-Card->GetComponentLocation()).GetSafeNormal();
+        Card->SetWorldRotation(FRotationMatrix::MakeFromXZ(Right,View).Rotator());
+        const float Envelope=static_cast<float>(AlphaPresentation::EffectEnvelope(Age,Duration));
+        Card->SetRelativeScale3D(MonsterCardScales[I]*(.8f+.2f*Progress));
+        if (UMaterialInstanceDynamic* Material=Cast<UMaterialInstanceDynamic>(Card->GetMaterial(0)))
+        {
+            Material->SetScalarParameterValue(TEXT("Fade"),Envelope);
+            Material->SetScalarParameterValue(TEXT("Glow"),.25f*Envelope);
+        }
+    }
+}
+
+
+AAlphaCombatEffect* AAlphaCombatEffect::SpawnMonsterShot(UWorld* World, const FVector& Muzzle, const FVector& End)
+{
+    if (End.ContainsNaN() || Muzzle.ContainsNaN() || FVector::DistSquared(Muzzle,End)>FMath::Square(1200.f)) return nullptr;
+    AAlphaCombatEffect* Effect=SpawnMonsterAttack(World,Muzzle,End-Muzzle,2);
+    if (!Effect || Effect->Pieces.IsEmpty()) return Effect;
+    FVector Target=End;
+    FCollisionObjectQueryParams Objects;
+    Objects.AddObjectTypesToQuery(ECC_WorldStatic);
+    FCollisionQueryParams Query(SCENE_QUERY_STAT(AlphaMonsterMuzzlePath),false,Effect);
+    FHitResult Hit;
+    if (World->LineTraceSingleByObjectType(Hit,Muzzle,End,Objects,Query)) Target=Hit.ImpactPoint;
+    const FVector Local=Effect->GetActorTransform().InverseTransformPosition(Target);
+    FPiece& Beam=Effect->Pieces[0];
+    Beam.Start=Local*.5;
+    Beam.Scale=FVector(FMath::Max(1.,Local.Size())/100.,.03,.03);
+    Beam.Rotation=Local.GetSafeNormal().Rotation().Quaternion();
+    Effect->UpdatePieces(0.f);
+    return Effect;
 }

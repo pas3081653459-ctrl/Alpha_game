@@ -18,6 +18,9 @@
 #include "Rules/CombatRules.h"
 #include "Rules/LevelLayoutRules.h"
 #include "Visuals/AlphaArtLibrary.h"
+#include "Visuals/AlphaCombatEffect.h"
+#include "Visuals/AlphaCombatAudio.h"
+#include "Visuals/AlphaCombatCamera.h"
 #include "Visuals/AlphaCharacterVisualComponent.h"
 #include "World/AlphaGameState.h"
 
@@ -252,6 +255,7 @@ bool AAlphaForgeBoss::IsPointInAttackZone(EAlphaForgeAttack Attack, const FVecto
 void AAlphaForgeBoss::ResolveAttack()
 {
     if (!HasAuthority() || !CombatComponent->CanAct()) return;
+    MulticastAttackRelease(static_cast<uint8>(AttackType), TelegraphOrigin, TelegraphDirection);
     const float Damage = AttackType == EAlphaForgeAttack::Hammer ? 20.f : (AttackType == EAlphaForgeAttack::FireLine ? 14.f : 12.f);
     for (TActorIterator<AAlphaCharacter> It(GetWorld()); It; ++It)
     {
@@ -392,4 +396,13 @@ void AAlphaForgeBoss::UpdateTelegraph()
         AddTelegraphSegment(Origin, Previous);
         AddTelegraphSegment(Origin, Origin + Forward.RotateAngleAxis(-65.f + Progress * 130.f, FVector::UpVector) * 330.f, 3.f);
     }
+}
+
+void AAlphaForgeBoss::MulticastAttackRelease_Implementation(uint8 ReleasedAttack, FVector Location, FVector Facing)
+{
+    if (ReleasedAttack < 1 || ReleasedAttack > 3) return;
+    const int32 Effect = ReleasedAttack == 1 ? 3 : (ReleasedAttack == 2 ? 4 : 5);
+    AAlphaCombatEffect::SpawnMonsterAttack(GetWorld(), Location, Facing, Effect);
+    AlphaAudio::Play(GetWorld(), Location, Effect == 5 ? EAlphaSoundCue::Poise : EAlphaSoundCue::Skill);
+    if (Effect == 5) AAlphaCombatCamera::KickAt(GetWorld(), Location, .7f);
 }

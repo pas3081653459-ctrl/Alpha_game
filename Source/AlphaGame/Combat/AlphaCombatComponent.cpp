@@ -320,6 +320,7 @@ void UAlphaCombatComponent::ReleaseAttack()
     const FVector Start = Owner->GetActorLocation() + FVector(0.0f, 0.0f, bPendingCombo ? Data.VerticalOffset : 0.0);
     // The facing vector is frozen when the attack begins, even if movement turns the owner during windup.
     const FVector End = Start + PendingFacing * Reach;
+    if (TeamId == 2 && !bPendingCombo) MulticastEnemyAttackReleased(Start, PendingFacing);
     FCollisionObjectQueryParams Objects;
     Objects.AddObjectTypesToQuery(ECC_Pawn);
     Objects.AddObjectTypesToQuery(ECC_WorldDynamic);
@@ -565,4 +566,9 @@ void UAlphaCombatComponent::OnRep_Poise() { OnVitalsChanged.Broadcast(); }
 void UAlphaCombatComponent::MulticastGroundImpact_Implementation(FVector Location, FVector Normal, float Radius)
 {
     OnGroundImpact.Broadcast(Location, Normal, Radius);
+}
+
+void UAlphaCombatComponent::MulticastEnemyAttackReleased_Implementation(FVector Location, FVector Facing)
+{
+    OnEnemyAttackReleased.Broadcast(Location, Facing);
 }

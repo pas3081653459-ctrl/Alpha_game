@@ -1,0 +1,13 @@
+{
+  "source": "T_MonsterEffects.png",
+  "provenance": "Original image_gen transparent anime VFX atlas",
+  "sha256": "c79a819b60ac979806c6394e6ebc38ce3d52eb76a52ade92d6ca10ba0b122354",
+  "width": 1254,
+  "height": 1254,
+  "cells": [
+    "Slash",
+    "Impact",
+    "Fire",
+    "Smoke"
+  ]
+}

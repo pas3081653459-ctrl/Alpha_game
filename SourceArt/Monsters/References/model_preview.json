@@ -1,0 +1,4 @@
+{
+  "generator": "Scripts/generate_monster_meshes.py -- --preview",
+  "note": "Offline Blender Workbench render of reimported exported FBX meshes, not an Unreal screenshot. Identity node transforms and local mesh bounds verified within 0.001cm. UE import and rendering remain unverified."
+}

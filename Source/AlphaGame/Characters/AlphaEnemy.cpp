@@ -8,6 +8,8 @@
 #include "Net/UnrealNetwork.h"
 #include "Rules/EnemyTacticsRules.h"
 #include "Visuals/AlphaCharacterVisualComponent.h"
+#include "Visuals/AlphaCombatEffect.h"
+#include "Visuals/AlphaCombatAudio.h"
 #include "EngineUtils.h"
 #include "Engine/World.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -29,6 +31,7 @@ AAlphaEnemy::AAlphaEnemy()
 void AAlphaEnemy::BeginPlay()
 {
     Super::BeginPlay();
+    CombatComponent->OnEnemyAttackReleased.AddDynamic(this, &AAlphaEnemy::ShowReleasedAttack);
     if (HasAuthority())
     {
         CombatComponent->OnPoiseBroken.AddDynamic(this, &AAlphaEnemy::HandleShieldBroken);
@@ -269,6 +272,7 @@ void AAlphaEnemy::UpdateTacticalAttack()
 
 void AAlphaEnemy::ResolveGunnerShot()
 {
+    MulticastGunnerRelease(TellOrigin + FVector(0, 0, 42), TellDirection);
     // One confirmed release, even if everybody dodged; cancellation never increments it.
     ShotRevision = ShotRevision == MAX_int32 ? 0 : ShotRevision + 1;
     const AAlphaGameState* State = GetWorld()->GetGameState<AAlphaGameState>();
@@ -301,4 +305,21 @@ void AAlphaEnemy::HandleDeath()
         AttackTarget.Reset();
         SetLifeSpan(2.0f);
     }
+}
+
+void AAlphaEnemy::ShowReleasedAttack(FVector Location, FVector Facing)
+{
+    if (EnemyRole == EAlphaEnemyRole::Gunner) return;
+    const int32 Effect = EnemyRole == EAlphaEnemyRole::Shield ? 1 : 0;
+    AAlphaCombatEffect::SpawnMonsterAttack(GetWorld(), Location, Facing, Effect);
+    AlphaAudio::Play(GetWorld(), Location, Effect == 1 ? EAlphaSoundCue::Hit : EAlphaSoundCue::Slash);
+}
+
+void AAlphaEnemy::MulticastGunnerRelease_Implementation(FVector Location, FVector Facing)
+{
+    const UAlphaCharacterVisualComponent* Visual=FindComponentByClass<UAlphaCharacterVisualComponent>();
+    const FVector Muzzle=Visual ? Visual->GetMonsterMuzzleLocation() : Location + Facing*125.f;
+    AAlphaCombatEffect::SpawnMonsterShot(GetWorld(), Muzzle,
+        Location + Facing * AlphaEnemyRules::GunnerLength);
+    AlphaAudio::Play(GetWorld(), Location, EAlphaSoundCue::Skill);
 }

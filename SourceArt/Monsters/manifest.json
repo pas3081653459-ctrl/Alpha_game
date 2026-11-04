@@ -1,0 +1,577 @@
+{
+  "revision": 1,
+  "generator": "Scripts/generate_monster_meshes.py",
+  "coordinates": "centimeters, +X front, +Z up, identity FBX nodes, arm/leg/weapon local pivots",
+  "material_slots": [
+    "Cloth",
+    "Metal",
+    "Accent",
+    "Skin",
+    "Glow",
+    "Ink",
+    "White"
+  ],
+  "meshes": [
+    {
+      "name": "SM_AlphaMonster0_Body",
+      "vertices": 542,
+      "triangles": 988,
+      "bounds_cm": [
+        [
+          -17.0,
+          -26.0,
+          -69.0
+        ],
+        [
+          19.0,
+          26.0,
+          48.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster0_Head",
+      "vertices": 278,
+      "triangles": 500,
+      "bounds_cm": [
+        [
+          -13.0,
+          -13.0,
+          46.0
+        ],
+        [
+          17.0,
+          13.0,
+          79.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster0_Hair",
+      "vertices": 186,
+      "triangles": 340,
+      "bounds_cm": [
+        [
+          -16.0,
+          -20.0,
+          52.0
+        ],
+        [
+          11.0,
+          20.0,
+          97.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster0_LeftArm",
+      "vertices": 704,
+      "triangles": 1344,
+      "bounds_cm": [
+        [
+          -8.0,
+          -17.0,
+          -53.0
+        ],
+        [
+          14.0,
+          17.0,
+          7.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster0_RightArm",
+      "vertices": 704,
+      "triangles": 1344,
+      "bounds_cm": [
+        [
+          -8.0,
+          -17.0,
+          -53.0
+        ],
+        [
+          14.0,
+          17.0,
+          7.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster0_LeftLeg",
+      "vertices": 308,
+      "triangles": 592,
+      "bounds_cm": [
+        [
+          -8.0,
+          -9.0,
+          -49.0
+        ],
+        [
+          22.0,
+          9.0,
+          5.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster0_RightLeg",
+      "vertices": 308,
+      "triangles": 592,
+      "bounds_cm": [
+        [
+          -8.0,
+          -9.0,
+          -49.0
+        ],
+        [
+          22.0,
+          9.0,
+          5.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster0_Weapon",
+      "vertices": 76,
+      "triangles": 136,
+      "bounds_cm": [
+        [
+          -20.0,
+          -9.0,
+          -2.700000047683716
+        ],
+        [
+          98.0,
+          9.0,
+          13.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster1_Body",
+      "vertices": 886,
+      "triangles": 1660,
+      "bounds_cm": [
+        [
+          -17.0,
+          -26.0,
+          -69.0
+        ],
+        [
+          22.0,
+          26.0,
+          48.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster1_Head",
+      "vertices": 260,
+      "triangles": 472,
+      "bounds_cm": [
+        [
+          -13.0,
+          -13.0,
+          46.0
+        ],
+        [
+          17.0,
+          13.0,
+          79.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster1_Hair",
+      "vertices": 129,
+      "triangles": 238,
+      "bounds_cm": [
+        [
+          -16.0,
+          -17.0,
+          52.0
+        ],
+        [
+          11.0,
+          17.0,
+          97.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster1_LeftArm",
+      "vertices": 713,
+      "triangles": 1358,
+      "bounds_cm": [
+        [
+          -10.0,
+          -20.0,
+          -53.0
+        ],
+        [
+          14.0,
+          20.0,
+          17.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster1_RightArm",
+      "vertices": 713,
+      "triangles": 1358,
+      "bounds_cm": [
+        [
+          -10.0,
+          -20.0,
+          -53.0
+        ],
+        [
+          14.0,
+          20.0,
+          17.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster1_LeftLeg",
+      "vertices": 308,
+      "triangles": 592,
+      "bounds_cm": [
+        [
+          -9.0,
+          -10.0,
+          -49.0
+        ],
+        [
+          22.0,
+          10.0,
+          5.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster1_RightLeg",
+      "vertices": 308,
+      "triangles": 592,
+      "bounds_cm": [
+        [
+          -9.0,
+          -10.0,
+          -49.0
+        ],
+        [
+          22.0,
+          10.0,
+          5.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster1_Weapon",
+      "vertices": 106,
+      "triangles": 184,
+      "bounds_cm": [
+        [
+          -20.0,
+          -10.0,
+          -8.0
+        ],
+        [
+          93.0,
+          10.0,
+          14.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster2_Body",
+      "vertices": 670,
+      "triangles": 1244,
+      "bounds_cm": [
+        [
+          -35.0,
+          -26.0,
+          -72.0
+        ],
+        [
+          19.0,
+          26.0,
+          48.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster2_Head",
+      "vertices": 266,
+      "triangles": 480,
+      "bounds_cm": [
+        [
+          -13.0,
+          -13.0,
+          46.0
+        ],
+        [
+          30.0,
+          13.0,
+          79.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster2_Hair",
+      "vertices": 116,
+      "triangles": 220,
+      "bounds_cm": [
+        [
+          -18.0,
+          -17.0,
+          48.0
+        ],
+        [
+          10.0,
+          17.0,
+          93.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster2_LeftArm",
+      "vertices": 444,
+      "triangles": 856,
+      "bounds_cm": [
+        [
+          -13.0,
+          -12.0,
+          -53.0
+        ],
+        [
+          12.0,
+          12.0,
+          5.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster2_RightArm",
+      "vertices": 444,
+      "triangles": 856,
+      "bounds_cm": [
+        [
+          -13.0,
+          -12.0,
+          -53.0
+        ],
+        [
+          12.0,
+          12.0,
+          5.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster2_LeftLeg",
+      "vertices": 308,
+      "triangles": 592,
+      "bounds_cm": [
+        [
+          -8.0,
+          -9.0,
+          -49.0
+        ],
+        [
+          22.0,
+          9.0,
+          5.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster2_RightLeg",
+      "vertices": 308,
+      "triangles": 592,
+      "bounds_cm": [
+        [
+          -8.0,
+          -9.0,
+          -49.0
+        ],
+        [
+          22.0,
+          9.0,
+          5.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster2_Weapon",
+      "vertices": 282,
+      "triangles": 524,
+      "bounds_cm": [
+        [
+          -40.0,
+          -7.0,
+          -20.0
+        ],
+        [
+          125.0,
+          7.0,
+          20.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster3_Body",
+      "vertices": 1542,
+      "triangles": 2888,
+      "bounds_cm": [
+        [
+          -40.20000076293945,
+          -31.0,
+          -69.0
+        ],
+        [
+          26.100000381469727,
+          31.0,
+          67.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster3_Head",
+      "vertices": 278,
+      "triangles": 500,
+      "bounds_cm": [
+        [
+          -13.0,
+          -13.0,
+          46.0
+        ],
+        [
+          17.0,
+          13.0,
+          79.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster3_Hair",
+      "vertices": 194,
+      "triangles": 352,
+      "bounds_cm": [
+        [
+          -16.0,
+          -20.0,
+          52.0
+        ],
+        [
+          13.0,
+          20.0,
+          105.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster3_LeftArm",
+      "vertices": 713,
+      "triangles": 1358,
+      "bounds_cm": [
+        [
+          -10.0,
+          -20.0,
+          -53.0
+        ],
+        [
+          14.0,
+          20.0,
+          17.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster3_RightArm",
+      "vertices": 713,
+      "triangles": 1358,
+      "bounds_cm": [
+        [
+          -10.0,
+          -20.0,
+          -53.0
+        ],
+        [
+          14.0,
+          20.0,
+          17.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster3_LeftLeg",
+      "vertices": 308,
+      "triangles": 592,
+      "bounds_cm": [
+        [
+          -9.0,
+          -10.0,
+          -49.0
+        ],
+        [
+          22.0,
+          10.0,
+          5.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster3_RightLeg",
+      "vertices": 308,
+      "triangles": 592,
+      "bounds_cm": [
+        [
+          -9.0,
+          -10.0,
+          -49.0
+        ],
+        [
+          22.0,
+          10.0,
+          5.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster3_Weapon",
+      "vertices": 276,
+      "triangles": 488,
+      "bounds_cm": [
+        [
+          -22.0,
+          -32.0,
+          -36.0
+        ],
+        [
+          131.3000030517578,
+          32.0,
+          39.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaMonster1_Shield",
+      "vertices": 1028,
+      "triangles": 1752,
+      "bounds_cm": [
+        [
+          -8.0,
+          -32.0,
+          -43.0
+        ],
+        [
+          15.0,
+          32.0,
+          42.0
+        ]
+      ]
+    }
+  ]
+}

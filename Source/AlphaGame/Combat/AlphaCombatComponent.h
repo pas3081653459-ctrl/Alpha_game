@@ -6,6 +6,7 @@
 #include "AlphaCombatComponent.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FAlphaCombatEvent);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FAlphaEnemyReleaseEvent, FVector, Location, FVector, Facing);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FAlphaAttackEvent, bool, bHeavy);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FAlphaHitEvent, float, ActualDamage, AActor*, InstigatorActor);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FAlphaHitConfirmedEvent, AActor*, Target, bool, bPoiseBroken);
@@ -118,6 +119,10 @@ public:
     /** Presentation event on the server and relevant clients; never drives hit detection. */
     UPROPERTY(BlueprintAssignable, Category="Combat")
     FAlphaAttackEvent OnAttack;
+
+    /** Confirmed Team 2 release only; cosmetic and never a client damage request. */
+    UPROPERTY(BlueprintAssignable, Category="Combat")
+    FAlphaEnemyReleaseEvent OnEnemyAttackReleased;
 
     /** Team 1 uses this event instead of OnAttack, once per accepted combo stage. */
     UPROPERTY(BlueprintAssignable, Category="Combat|Combo")
@@ -243,6 +248,9 @@ private:
 
     UFUNCTION(NetMulticast, Unreliable)
     void MulticastAttack(bool bHeavy, FVector Facing);
+
+    UFUNCTION(NetMulticast, Unreliable)
+    void MulticastEnemyAttackReleased(FVector Location, FVector Facing);
 
     UFUNCTION(NetMulticast, Reliable)
     void MulticastComboAttack(int32 Stage, bool bAirborne, FVector Facing);

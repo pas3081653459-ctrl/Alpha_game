@@ -7,8 +7,9 @@ from pathlib import Path
 import unreal
 
 ROOT = Path(__file__).resolve().parents[1]
-REVISION = 1
-GENERATORS = ('Scripts/Editor/import_character_meshes.py', 'Scripts/create_backdrop_assets.py')
+REVISION = 2
+GENERATORS = ('Scripts/Editor/import_character_meshes.py', 'Scripts/create_backdrop_assets.py',
+              'Scripts/Editor/import_monster_meshes.py', 'Scripts/create_monster_effect_assets.py')
 
 
 def modules():
@@ -33,6 +34,12 @@ def expected_assets():
     return ([f'/Game/Art/Characters/Generated/SM_AlphaHero{hero}_{part}'
              for hero in range(3)
              for part in ('Body', 'Head', 'Hair', 'LeftArm', 'RightArm', 'LeftLeg', 'RightLeg')]
+            + [f'/Game/Art/Monsters/Generated/SM_AlphaMonster{role}_{part}'
+               for role in range(4)
+               for part in ('Body', 'Head', 'Hair', 'LeftArm', 'RightArm', 'LeftLeg', 'RightLeg', 'Weapon')]
+            + ['/Game/Art/Monsters/Generated/SM_AlphaMonster1_Shield']
+            + ['/Game/Art/MonsterEffects/T_MonsterEffects']
+            + [f'/Game/Art/MonsterEffects/M_{name}' for name in ('Slash', 'Impact', 'Fire', 'Smoke')]
             + ['/Game/Art/Backdrops/T_ChapterPanoramas']
             + [f'/Game/Art/Backdrops/M_Chapter{chapter}' for chapter in range(3)])
 

@@ -80,13 +80,21 @@ try {
 if ($VisualExit -ne 0) { exit $VisualExit }
 if (!(Test-Path $VisualReport)) { throw 'No current modeled character/backdrop save report.' }
 $VisualResult = Get-Content -Raw $VisualReport | ConvertFrom-Json
-if ($VisualResult.status -ne 'saved' -or $VisualResult.revision -ne 1) { throw 'Visual import did not finish.' }
+if ($VisualResult.status -ne 'saved' -or $VisualResult.revision -ne 2) { throw 'Visual import did not finish.' }
 $ExpectedVisuals = @('/Game/Art/Backdrops/T_ChapterPanoramas')
 foreach ($Hero in 0..2) {
     foreach ($Part in @('Body','Head','Hair','LeftArm','RightArm','LeftLeg','RightLeg')) {
         $ExpectedVisuals += "/Game/Art/Characters/Generated/SM_AlphaHero${Hero}_$Part"
     }
 }
+foreach ($Role in 0..3) {
+    foreach ($Part in @('Body','Head','Hair','LeftArm','RightArm','LeftLeg','RightLeg','Weapon')) {
+        $ExpectedVisuals += "/Game/Art/Monsters/Generated/SM_AlphaMonster${Role}_$Part"
+    }
+}
+$ExpectedVisuals += '/Game/Art/Monsters/Generated/SM_AlphaMonster1_Shield'
+$ExpectedVisuals += '/Game/Art/MonsterEffects/T_MonsterEffects'
+foreach ($Name in @('Slash','Impact','Fire','Smoke')) { $ExpectedVisuals += "/Game/Art/MonsterEffects/M_$Name" }
 foreach ($Chapter in 0..2) { $ExpectedVisuals += "/Game/Art/Backdrops/M_Chapter$Chapter" }
 if (@($VisualResult.assets).Count -ne $ExpectedVisuals.Count) { throw 'Visual asset count mismatch.' }
 foreach ($Asset in $ExpectedVisuals) {

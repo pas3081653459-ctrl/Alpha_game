@@ -98,6 +98,16 @@ def main():
     required.extend(f'SourceArt/Characters/SM_AlphaHero{hero}_{part}.fbx'
                     for hero in range(3)
                     for part in ('Body','Head','Hair','LeftArm','RightArm','LeftLeg','RightLeg'))
+    required.extend([
+        'Scripts/generate_monster_meshes.py', 'Scripts/Editor/import_monster_meshes.py',
+        'Scripts/create_monster_effect_assets.py', 'SourceArt/Monsters/manifest.json',
+        'SourceArt/Monsters/References/AnimeMonsterTurnarounds.png',
+        'SourceArt/MonsterEffects/T_MonsterEffects.png', 'SourceArt/MonsterEffects/manifest.json',
+    ])
+    required.extend(f'SourceArt/Monsters/SM_AlphaMonster{role}_{part}.fbx'
+                    for role in range(4)
+                    for part in ('Body','Head','Hair','LeftArm','RightArm','LeftLeg','RightLeg','Weapon'))
+    required.append('SourceArt/Monsters/SM_AlphaMonster1_Shield.fbx')
     required.extend(f'SourceAudio/S_Alpha{name}.wav' for name in ('Slash','Hit','Poise','Roll','Skill','Ultimate'))
     for path in required:
         assert (ROOT / path).is_file(), f'Missing: {path}'
@@ -109,7 +119,9 @@ def main():
     assert struct.unpack('>II', art_bytes[16:24]) == (art_manifest['width'], art_manifest['height']), 'Anime atlas dimensions mismatch'
     assert art_manifest['width'] == art_manifest['height'] and art_manifest['width'] % 2 == 0, 'Atlas requires an even square 2x2 layout'
     for folder, filename in [('SourceArt/Characters/References', 'AnimeHeroTurnarounds.png'),
-                             ('SourceArt/Backdrops', 'T_ChapterPanoramas.png')]:
+                             ('SourceArt/Backdrops', 'T_ChapterPanoramas.png'),
+                             ('SourceArt/Monsters/References', 'AnimeMonsterTurnarounds.png'),
+                             ('SourceArt/MonsterEffects', 'T_MonsterEffects.png')]:
         image = ROOT / folder / filename
         data = image.read_bytes()
         manifest = json.loads((image.parent / 'manifest.json').read_text(encoding='utf-8'))
@@ -122,6 +134,15 @@ def main():
         source = ROOT / 'SourceArt/Characters' / (mesh['name'] + '.fbx')
         assert source.read_bytes().startswith(b'Kaydara FBX Binary'), f'FBX source is missing or an LFS pointer: {source}'
         assert mesh['vertices'] > 0 and mesh['triangles'] > 0, 'Empty character mesh'
+    monster_manifest = json.loads((ROOT / 'SourceArt/Monsters/manifest.json').read_text())
+    assert len(monster_manifest['meshes']) == 33, 'Missing monster model parts'
+    for mesh in monster_manifest['meshes']:
+        source = ROOT / 'SourceArt/Monsters' / (mesh['name'] + '.fbx')
+        assert source.read_bytes().startswith(b'Kaydara FBX Binary'), f'Missing monster FBX source: {source}'
+        assert mesh['vertices'] > 0 and mesh['triangles'] > 0, 'Empty monster mesh'
+    vfx = (ROOT / 'SourceArt/MonsterEffects/T_MonsterEffects.png').read_bytes()
+    vfx_width, vfx_height = struct.unpack('>II', vfx[16:24])
+    assert vfx[25] == 6 and vfx_width == vfx_height and vfx_width % 2 == 0, 'VFX atlas needs an even square RGBA layout'
     config = (ROOT / 'Config/DefaultEngine.ini').read_text(encoding='utf-8')
     assert 'GameInstanceClass=/Script/AlphaGame.AlphaGameInstance' in config
     assert 'GlobalDefaultGameMode=/Script/AlphaGame.AlphaGameMode' in config
