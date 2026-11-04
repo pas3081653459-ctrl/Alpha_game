@@ -293,15 +293,33 @@ void AAlphaForgeBoss::HandleDeath()
 
 void AAlphaForgeBoss::AddTelegraphSegment(const FVector& A, const FVector& B, float Width)
 {
-    FVector Start = A;
-    FVector End = B;
-    Start.Z = End.Z = 10.f;
-    const FVector Delta = End - Start;
-    if (Delta.SizeSquared() < .01f) return;
-    const FTransform Transform(Delta.Rotation(), (Start + End) * .5f,
-        FVector(Delta.Size() / 100.f, Width / 100.f, .03f));
-    // Instances are local presentation only; the synchronized tell is world-space.
-    TelegraphMarkers->AddInstance(Transform, true);
+    const int32 ChapterIndex = AlphaForgeRoute::Chapter(GetWorld());
+    const FVector ChapterOrigin = AAlphaGameState::GetChapterOrigin(ChapterIndex);
+    TArray<double> Cuts{0.,1.};
+    const double Run=B.X-A.X;
+    if (FMath::Abs(Run)>.001)
+        for (const AlphaLayoutRules::ElevationPoint& Point:AlphaLayoutRules::ElevationProfile(ChapterIndex))
+        {
+            const double T=(ChapterOrigin.X+Point.X-A.X)/Run;
+            if (T>0.&&T<1.) Cuts.Add(T);
+        }
+    Cuts.Sort();
+    for (int32 Index=1;Index<Cuts.Num();++Index)
+    {
+        FVector Start=FMath::Lerp(A,B,Cuts[Index-1]);
+        FVector End=FMath::Lerp(A,B,Cuts[Index]);
+        Start.Z=ChapterOrigin.Z+AlphaLayoutRules::SurfaceHeight(ChapterIndex,
+            AlphaForgeRoute::Local(ChapterIndex,Start))+10.;
+        End.Z=ChapterOrigin.Z+AlphaLayoutRules::SurfaceHeight(ChapterIndex,
+            AlphaForgeRoute::Local(ChapterIndex,End))+10.;
+        const FVector Delta=End-Start;
+        if (Delta.SizeSquared()<.01) continue;
+        const FTransform Transform(Delta.Rotation(),(Start+End)*.5,
+            FVector(Delta.Size()/100.,Width/100.,.03));
+        // Split at slope changes so long fire lanes cannot cut through a hill.
+        // Presentation instances stay world-space; damage remains authoritative.
+        TelegraphMarkers->AddInstance(Transform,true);
+    }
 }
 
 void AAlphaForgeBoss::UpdateTelegraph()
@@ -350,7 +368,7 @@ void AAlphaForgeBoss::UpdateTelegraph()
     if (AttackType == EAlphaForgeAttack::Hammer)
     {
         Circle(240.f, 32, 5.f);
-        Circle(240.f * Progress, 16, 3.f); // 48 instances maximum.
+        Circle(240.f * Progress, 16, 3.f); // Extra pieces appear only when crossing slope breaks.
     }
     else if (AttackType == EAlphaForgeAttack::FireLine)
     {

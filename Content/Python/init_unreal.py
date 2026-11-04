@@ -74,3 +74,29 @@ try:
     ensure_generated_audio()
 except Exception as error:
     unreal.log_error(f'AlphaGame audio generation FAILED: {error}. Run Scripts/create_audio_assets.py and inspect the Python log.')
+
+
+def ensure_generated_visuals():
+    command_line = unreal.SystemLibrary.get_command_line().lower()
+    if '-run=' in command_line or '-executepythonscript=' in command_line:
+        return
+    root = Path(unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_dir()))
+    script = root / 'Scripts/create_visual_assets.py'
+    spec = importlib.util.spec_from_file_location('alpha_project_visual_generator', script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    try:
+        report = json.loads((root / 'Saved/VisualBuild.json').read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        report = {}
+    if (report.get('source_fingerprint') == module.source_fingerprint()
+            and report.get('revision') == module.REVISION
+            and all(unreal.EditorAssetLibrary.does_asset_exist(path) for path in module.expected_assets())):
+        return
+    module.main()
+
+
+try:
+    ensure_generated_visuals()
+except Exception as error:
+    unreal.log_error(f'AlphaGame modeled hero/backdrop import FAILED: {error}. Run Scripts/create_visual_assets.py and inspect the Python log.')

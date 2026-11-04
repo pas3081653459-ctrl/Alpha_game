@@ -1,0 +1,4 @@
+{
+  "generator": "Scripts/generate_character_meshes.py -- --preview",
+  "note": "Offline Blender Workbench render of reimported FBX meshes, not an Unreal screenshot. Export/reimport coordinates and bounds matched within 0.001cm; UE import/render remains unverified."
+}

@@ -1,6 +1,7 @@
 #include "Visuals/AlphaChapterEnvironment.h"
 
 #include "Visuals/AlphaArtLibrary.h"
+#include "Rules/LevelLayoutRules.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/SceneComponent.h"
@@ -104,11 +105,14 @@ void AAlphaChapterEnvironment::BuildRouteMarkers(UInstancedStaticMeshComponent* 
     Add(Trim, FVector(-1100, 0, 2), FVector(250, 250, 3));
     for (float Side : {-1.f, 1.f})
         Add(Light, FVector(-1100, Side * 127.f, 5), FVector(250, 4, 3));
-    Add(Trim, FVector(2410, 0, 2), FVector(150, 180, 3));
+    Add(Trim, FVector(2410, 0, 2+AlphaLayoutRules::SurfaceHeight(ChapterIndex,{2410,0})), FVector(150, 180, 3));
     for (float X : {700.f, 1050.f})
     {
-        Beam(Light, FVector(X - 25, -25, 5), FVector(X + 15, 0, 5), 5.f);
-        Beam(Light, FVector(X + 15, 0, 5), FVector(X - 25, 25, 5), 5.f);
+        const FVector A(X-25,-25,5+AlphaLayoutRules::SurfaceHeight(ChapterIndex,{X-25,0}));
+        const FVector B(X+15,0,5+AlphaLayoutRules::SurfaceHeight(ChapterIndex,{X+15,0}));
+        const FVector C(X-25,25,A.Z);
+        Beam(Light,A,B,5.f);
+        Beam(Light,B,C,5.f);
     }
 }
 

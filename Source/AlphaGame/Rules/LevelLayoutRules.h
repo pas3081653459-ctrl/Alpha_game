@@ -22,9 +22,29 @@ inline Rect Floor(int Chapter, int Index)
     if (Index < 0 || Index >= FloorCount(Chapter)) return {0,0,0,0};
     return Chapter == 0 ? Dock[Index] : (Chapter == 1 ? Forge[Index] : Canal[Index]);
 }
+struct ElevationPoint { double X; double Z; };
+inline const std::vector<ElevationPoint>& ElevationProfile(int Chapter)
+{
+    // All human starts and the story NPC remain on the level entry apron.
+    // Continuous cross-route ramps let existing walking AI climb without jumps.
+    static const std::vector<ElevationPoint> Dock={{-1400,0},{-200,0},{400,120},{650,120},{1150,40},{2500,40}};
+    static const std::vector<ElevationPoint> Forge={{-1400,0},{-200,0},{400,100},{650,100},{1200,220},{2500,220}};
+    static const std::vector<ElevationPoint> Canal={{-1400,0},{-200,0},{400,60},{600,60},{900,180},{1250,90},{2500,90}};
+    static const std::vector<ElevationPoint> Empty;
+    return Chapter==0?Dock:(Chapter==1?Forge:(Chapter==2?Canal:Empty));
+}
 inline double SurfaceHeight(int Chapter, Point P)
 {
-    return Chapter==0 && Finite(P) && P.X>=-50. && P.X<=450. && P.Y>=250. && P.Y<=520. ? 30. : 0.;
+    if (!ValidChapter(Chapter) || !Finite(P)) return 0.;
+    const auto& Profile = ElevationProfile(Chapter);
+    if (P.X <= Profile.front().X) return Profile.front().Z;
+    for (std::size_t I=1; I<Profile.size(); ++I)
+        if (P.X <= Profile[I].X)
+        {
+            const double T=(P.X-Profile[I-1].X)/(Profile[I].X-Profile[I-1].X);
+            return Profile[I-1].Z+(Profile[I].Z-Profile[I-1].Z)*T;
+        }
+    return Profile.back().Z;
 }
 inline std::vector<Rect> FloorTiles(int Chapter)
 {
@@ -54,6 +74,22 @@ inline std::vector<Rect> FloorTiles(int Chapter)
         }
     }
     return Tiles;
+}
+struct TerrainTile { Rect Bounds; double StartZ; double EndZ; };
+inline std::vector<TerrainTile> TerrainTiles(int Chapter)
+{
+    // Split the floor union at every slope break. Each collision slab and its
+    // visible surface share this exact affine top plane, with no hidden floor.
+    std::vector<TerrainTile> Result;
+    const auto& Profile=ElevationProfile(Chapter);
+    for (const Rect& R:FloorTiles(Chapter))
+        for (std::size_t I=1; I<Profile.size(); ++I)
+        {
+            const double Begin=std::max(R.MinX,Profile[I-1].X),End=std::min(R.MaxX,Profile[I].X);
+            if (End>Begin) Result.push_back({{Begin,End,R.MinY,R.MaxY},
+                SurfaceHeight(Chapter,{Begin,0}),SurfaceHeight(Chapter,{End,0})});
+        }
+    return Result;
 }
 inline bool Contains(int Chapter, Point P)
 {

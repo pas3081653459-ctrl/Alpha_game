@@ -5,6 +5,7 @@
 #include "Rules/LevelLayoutRules.h"
 #include "World/AlphaRouteGeometry.h"
 #include "Visuals/AlphaChapterEnvironment.h"
+#include "Visuals/AlphaScenicBackdrop.h"
 #include "Characters/Boss/AlphaForgeBoss.h"
 #include "Visuals/AlphaArtLibrary.h"
 #include "Visuals/AlphaForgeEnvironment.h"
@@ -44,6 +45,8 @@ void AAlphaGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 
 void AAlphaGameState::BuildPrototypeArena()
 {
+    if (GetNetMode() != NM_DedicatedServer)
+        GetWorld()->SpawnActor<AAlphaScenicBackdrop>();
     for (int32 Chapter = 0; Chapter < AlphaStoryRules::ChapterCount; ++Chapter)
     {
         const FVector Origin = GetChapterOrigin(Chapter);

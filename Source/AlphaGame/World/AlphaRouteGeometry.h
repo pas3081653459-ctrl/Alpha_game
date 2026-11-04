@@ -20,7 +20,7 @@ public:
     int32 GetBoundaryPieceCount() const { return BoundaryPieceCount; }
 private:
     void BuildRoute();
-    void AddCollisionBox(const FVector& Center, const FVector& Extent);
+    void AddCollisionBox(const FVector& Center, const FVector& Extent, const FRotator& Rotation = FRotator::ZeroRotator);
     UInstancedStaticMeshComponent* MakeBatch(FLinearColor Tint, int32 Style, float Strength);
     UPROPERTY(Transient) TArray<TObjectPtr<UBoxComponent>> CollisionPieces;
     UPROPERTY(Transient) TArray<TObjectPtr<UInstancedStaticMeshComponent>> SurfaceBatches;

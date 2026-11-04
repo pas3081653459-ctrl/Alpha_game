@@ -7,6 +7,7 @@
 
 class USceneComponent;
 class UStaticMeshComponent;
+class UStaticMesh;
 class UInstancedStaticMeshComponent;
 class UMaterialInstanceDynamic;
 class AAlphaCombatEffect;
@@ -50,6 +51,8 @@ private:
         const FRotator& Rotation = FRotator::ZeroRotator);
     UMaterialInstanceDynamic* MakeMaterial(FLinearColor Tint, float Metallic, float Roughness, float Glow = 0.0f);
     void BuildSilhouette();
+    bool BuildAuthoredHero();
+    UStaticMeshComponent* AddAuthoredPart(UStaticMesh* Mesh, USceneComponent* Parent, const FVector& Location);
     void BuildWeapon();
     void BuildAnimeDetails();
     void BuildEnemyTell();

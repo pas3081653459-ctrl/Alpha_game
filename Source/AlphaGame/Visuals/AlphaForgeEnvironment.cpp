@@ -1,6 +1,7 @@
 #include "Visuals/AlphaForgeEnvironment.h"
 
 #include "Visuals/AlphaArtLibrary.h"
+#include "Rules/LevelLayoutRules.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -218,8 +219,11 @@ void AAlphaForgeEnvironment::BuildWorkshop()
     // Individual floor chevrons guide the bend; they do not fill the gap.
     for (float X : {700.f, 1050.f})
     {
-        Bar(Brass, FVector(X - 25, -110, 4), FVector(X + 15, -80, 4), 4, 3);
-        Bar(Brass, FVector(X + 15, -80, 4), FVector(X - 25, -50, 4), 4, 3);
+        const FVector A(X-25,-110,4+AlphaLayoutRules::SurfaceHeight(1,{X-25,0}));
+        const FVector B(X+15,-80,4+AlphaLayoutRules::SurfaceHeight(1,{X+15,0}));
+        const FVector C(X-25,-50,A.Z);
+        Bar(Brass,A,B,4,3);
+        Bar(Brass,B,C,4,3);
     }
 
     // Landmark B: the furnace belongs to the distinct second encounter/Boss

@@ -66,6 +66,36 @@ foreach ($AudioName in $AudioNames) {
     }
 }
 Write-Host "Audio save report: $AudioReport (playback still requires validation)."
+$VisualReport = Join-Path $ProjectRoot ('Artifacts/Visuals/' + [guid]::NewGuid().ToString() + '.json')
+$PreviousVisualReport = $env:ALPHA_VISUAL_REPORT
+try {
+    $env:ALPHA_VISUAL_REPORT = $VisualReport
+    $VisualScript = Join-Path $ProjectRoot 'Scripts/create_visual_assets.py'
+    & $Editor $Project -run=pythonscript "-script=$VisualScript" -unattended -nop4 -NullRHI -stdout
+    $VisualExit = $LASTEXITCODE
+} finally {
+    if ($null -eq $PreviousVisualReport) { Remove-Item Env:ALPHA_VISUAL_REPORT -ErrorAction SilentlyContinue }
+    else { $env:ALPHA_VISUAL_REPORT = $PreviousVisualReport }
+}
+if ($VisualExit -ne 0) { exit $VisualExit }
+if (!(Test-Path $VisualReport)) { throw 'No current modeled character/backdrop save report.' }
+$VisualResult = Get-Content -Raw $VisualReport | ConvertFrom-Json
+if ($VisualResult.status -ne 'saved' -or $VisualResult.revision -ne 1) { throw 'Visual import did not finish.' }
+$ExpectedVisuals = @('/Game/Art/Backdrops/T_ChapterPanoramas')
+foreach ($Hero in 0..2) {
+    foreach ($Part in @('Body','Head','Hair','LeftArm','RightArm','LeftLeg','RightLeg')) {
+        $ExpectedVisuals += "/Game/Art/Characters/Generated/SM_AlphaHero${Hero}_$Part"
+    }
+}
+foreach ($Chapter in 0..2) { $ExpectedVisuals += "/Game/Art/Backdrops/M_Chapter$Chapter" }
+if (@($VisualResult.assets).Count -ne $ExpectedVisuals.Count) { throw 'Visual asset count mismatch.' }
+foreach ($Asset in $ExpectedVisuals) {
+    $Relative = $Asset.Substring('/Game/'.Length)
+    if ($VisualResult.assets -notcontains $Asset -or !(Test-Path (Join-Path $ProjectRoot "Content/$Relative.uasset"))) {
+        throw "Missing visual asset: $Asset"
+    }
+}
+Write-Host "Modeled characters and background assets saved: $VisualReport (rendering still requires validation)."
 if ($Action -eq 'Test') {
     $Expected = @(Get-ChildItem (Join-Path $ProjectRoot 'Source/AlphaGame/Tests') -Filter '*.cpp' | ForEach-Object {
         $Source = Get-Content -Raw $_.FullName

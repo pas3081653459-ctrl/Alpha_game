@@ -289,7 +289,7 @@ void AAlphaGameMode::QueueRouteEncounter(bool bBoss)
     GetWorldTimerManager().ClearTimer(WaveTimer);
     const AlphaLayoutRules::Point Anchor = bBoss ? AlphaLayoutRules::BossSpawn(State->ChapterIndex)
         : AlphaLayoutRules::EncounterAnchor(State->ChapterIndex, State->Wave + 1);
-    State->RouteObjective = AAlphaGameState::GetChapterOrigin(State->ChapterIndex) + FVector(Anchor.X, Anchor.Y, 0);
+    State->RouteObjective = AAlphaGameState::GetChapterOrigin(State->ChapterIndex) + FVector(Anchor.X, Anchor.Y, AlphaLayoutRules::SurfaceHeight(State->ChapterIndex, Anchor));
     State->bAwaitingRouteAdvance = true;
     State->RoundState = EAlphaRoundState::Intermission;
     RouteReadyAt = GetWorld()->GetTimeSeconds() + 1.5;
@@ -412,7 +412,7 @@ void AAlphaGameMode::StartBossEncounter()
     Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
     const AlphaLayoutRules::Point Local = AlphaLayoutRules::BossSpawn(State->ChapterIndex);
     AAlphaForgeBoss* Boss = GetWorld()->SpawnActor<AAlphaForgeBoss>(AAlphaForgeBoss::StaticClass(),
-        AAlphaGameState::GetChapterOrigin(State->ChapterIndex) + FVector(Local.X, Local.Y, 150), FRotator(0, 180, 0), Params);
+        AAlphaGameState::GetChapterOrigin(State->ChapterIndex) + FVector(Local.X, Local.Y, 150. + AlphaLayoutRules::SurfaceHeight(State->ChapterIndex, Local)), FRotator(0, 180, 0), Params);
     if (!Boss)
     {
         MarkDefeat();

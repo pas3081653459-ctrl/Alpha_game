@@ -47,6 +47,36 @@ int main()
                 for(Rect R:Tiles) if(X>=R.MinX&&X<=R.MaxX&&Y>=R.MinY&&Y<=R.MaxY) TileContains=true;
                 Check(TileContains==Contains(Chapter,P),"render/collision slabs equal planned union");
             }
+        const auto& Profile=ElevationProfile(Chapter);
+        Check(Profile.size()>=6,"chapter has several distinct elevation sections");
+        Check(SurfaceHeight(Chapter,{-650,-100})==0.&&SurfaceHeight(Chapter,{-290,100})==0.,"all three human starts remain on level apron");
+        double Peak=0.;
+        for(std::size_t I=1;I<Profile.size();++I)
+        {
+            Check(Profile[I].X>Profile[I-1].X,"height profile is ordered");
+            const double Slope=(Profile[I].Z-Profile[I-1].Z)/(Profile[I].X-Profile[I-1].X);
+            Check(std::abs(Slope)<=.400001,"ramps stay below ordinary character walkable slope");
+            Check(std::abs(SurfaceHeight(Chapter,{Profile[I].X-.001,0})-SurfaceHeight(Chapter,{Profile[I].X+.001,0}))<.001,"ramp joins are continuous");
+            Peak=std::max(Peak,Profile[I].Z);
+        }
+        Check(Peak>=120.,"height changes are visible at gameplay scale");
+        const auto Terrain=TerrainTiles(Chapter);
+        Check(Terrain.size()>Tiles.size(),"floor collision is split at slope changes");
+        for(const TerrainTile& T:Terrain)
+        {
+            const Rect R=T.Bounds;
+            const double MidX=(R.MinX+R.MaxX)*.5;
+            Check(std::abs(SurfaceHeight(Chapter,{MidX,(R.MinY+R.MaxY)*.5})-(T.StartZ+T.EndZ)*.5)<1e-9,"collision top interpolates same height as shared rules");
+        }
+        for(double X=-1375;X<2500;X+=50)
+            for(double Y=-613;Y<=637;Y+=125)
+            {
+                int Coverage=0;
+                for(const TerrainTile& T:Terrain)
+                    if(X>T.Bounds.MinX&&X<T.Bounds.MaxX&&Y>T.Bounds.MinY&&Y<T.Bounds.MaxY) ++Coverage;
+                // Grid deliberately avoids all authored tile edges.
+                Check(Coverage==(Contains(Chapter,{X,Y})?1:0),"raised floor covers the route exactly once and leaves void empty");
+            }
         const auto Edges=BoundarySegments(Chapter);
         Check(!Edges.empty(),"outer collision boundary exists");
         for(const Segment& E:Edges)
@@ -82,8 +112,10 @@ int main()
     Check(IsWalkable(2,{1900,500},45.),"canal rear garden is playable");
     Check(!IsWalkable(0,{1500,-500}),"dock footprint differs from canal");
     Check(IsWalkable(1,{700,-200},45.)&&!IsWalkable(1,{700,200}),"forge side corridor is asymmetric");
-    Check(SurfaceHeight(0,{200,385})==30.,"cargo platform is physically raised");
-    Check(SurfaceHeight(1,{200,385})==0.,"platform is chapter specific");
+    Check(SurfaceHeight(0,{200,385})==80.,"cargo approach climbs toward the raised deck");
+    Check(std::abs(SurfaceHeight(1,{200,385})-200./3.)<1e-9,"forge has its own height profile");
+    Check(SurfaceHeight(-1,{0,0})==0.&&SurfaceHeight(2,{NaN,0})==0.,"invalid height inputs fail safely");
+    Check(TerrainTiles(-1).empty(),"invalid chapter has no raised terrain");
     Check(!SegmentClear(2,{200,300},{1900,500}),"direct diagonal cannot cut bridge void");
     Check(FloorCount(-1)==0&&FloorCount(3)==0,"invalid floor chapters fail closed");
     Check(!IsWalkable(-1,{0,0})&&!IsWalkable(3,{0,0}),"invalid walk chapters fail closed");

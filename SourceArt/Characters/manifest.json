@@ -1,0 +1,373 @@
+{
+  "revision": 1,
+  "generator": "Scripts/generate_character_meshes.py",
+  "coordinates": "centimeters, +X facing, +Z up, limb-local pivots",
+  "material_slots": [
+    "Cloth",
+    "Metal",
+    "Accent",
+    "Skin",
+    "Glow",
+    "Ink",
+    "White"
+  ],
+  "meshes": [
+    {
+      "name": "SM_AlphaHero0_Body",
+      "vertices": 1685,
+      "triangles": 2960,
+      "bounds_cm": [
+        [
+          -22.0,
+          -26.0,
+          -70.0
+        ],
+        [
+          16.650585174560547,
+          26.0,
+          48.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaHero0_Head",
+      "vertices": 746,
+      "triangles": 1424,
+      "bounds_cm": [
+        [
+          -11.475000381469727,
+          -12.664999961853027,
+          47.0
+        ],
+        [
+          12.75,
+          12.664999961853027,
+          72.73999786376953
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaHero0_Hair",
+      "vertices": 202,
+      "triangles": 336,
+      "bounds_cm": [
+        [
+          -14.449999809265137,
+          -14.024999618530273,
+          57.13999938964844
+        ],
+        [
+          9.350000381469727,
+          14.024999618530273,
+          76.63999938964844
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaHero0_LeftArm",
+      "vertices": 804,
+      "triangles": 1572,
+      "bounds_cm": [
+        [
+          -9.0,
+          -10.0,
+          -53.0
+        ],
+        [
+          9.0,
+          10.0,
+          5.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaHero0_RightArm",
+      "vertices": 804,
+      "triangles": 1572,
+      "bounds_cm": [
+        [
+          -9.0,
+          -10.0,
+          -53.0
+        ],
+        [
+          9.0,
+          10.0,
+          5.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaHero0_LeftLeg",
+      "vertices": 488,
+      "triangles": 956,
+      "bounds_cm": [
+        [
+          -8.0,
+          -9.0,
+          -49.0
+        ],
+        [
+          22.0,
+          9.0,
+          4.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaHero0_RightLeg",
+      "vertices": 488,
+      "triangles": 956,
+      "bounds_cm": [
+        [
+          -8.0,
+          -9.0,
+          -49.0
+        ],
+        [
+          22.0,
+          9.0,
+          4.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaHero1_Body",
+      "vertices": 1727,
+      "triangles": 3068,
+      "bounds_cm": [
+        [
+          -35.0,
+          -23.0,
+          -30.0
+        ],
+        [
+          16.0,
+          23.0,
+          48.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaHero1_Head",
+      "vertices": 746,
+      "triangles": 1424,
+      "bounds_cm": [
+        [
+          -11.475000381469727,
+          -12.664999961853027,
+          47.0
+        ],
+        [
+          12.75,
+          12.664999961853027,
+          72.73999786376953
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaHero1_Hair",
+      "vertices": 204,
+      "triangles": 340,
+      "bounds_cm": [
+        [
+          -20.399999618530273,
+          -14.024999618530273,
+          57.13999938964844
+        ],
+        [
+          7.650000095367432,
+          14.024999618530273,
+          76.63999938964844
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaHero1_LeftArm",
+      "vertices": 860,
+      "triangles": 1680,
+      "bounds_cm": [
+        [
+          -8.5,
+          -9.0,
+          -53.0
+        ],
+        [
+          13.0,
+          9.0,
+          3.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaHero1_RightArm",
+      "vertices": 860,
+      "triangles": 1680,
+      "bounds_cm": [
+        [
+          -8.5,
+          -9.0,
+          -53.0
+        ],
+        [
+          13.0,
+          9.0,
+          3.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaHero1_LeftLeg",
+      "vertices": 488,
+      "triangles": 956,
+      "bounds_cm": [
+        [
+          -8.0,
+          -9.0,
+          -49.0
+        ],
+        [
+          22.0,
+          9.0,
+          4.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaHero1_RightLeg",
+      "vertices": 488,
+      "triangles": 956,
+      "bounds_cm": [
+        [
+          -8.0,
+          -9.0,
+          -49.0
+        ],
+        [
+          22.0,
+          9.0,
+          4.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaHero2_Body",
+      "vertices": 1854,
+      "triangles": 3248,
+      "bounds_cm": [
+        [
+          -22.0,
+          -26.0,
+          -75.0
+        ],
+        [
+          16.650585174560547,
+          26.0,
+          48.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaHero2_Head",
+      "vertices": 746,
+      "triangles": 1424,
+      "bounds_cm": [
+        [
+          -11.475000381469727,
+          -12.664999961853027,
+          47.0
+        ],
+        [
+          12.75,
+          12.664999961853027,
+          72.73999786376953
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaHero2_Hair",
+      "vertices": 194,
+      "triangles": 324,
+      "bounds_cm": [
+        [
+          -14.449999809265137,
+          -14.024999618530273,
+          54.02000045776367
+        ],
+        [
+          7.650000095367432,
+          14.024999618530273,
+          76.63999938964844
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaHero2_LeftArm",
+      "vertices": 804,
+      "triangles": 1572,
+      "bounds_cm": [
+        [
+          -9.0,
+          -10.0,
+          -53.0
+        ],
+        [
+          9.0,
+          10.0,
+          5.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaHero2_RightArm",
+      "vertices": 804,
+      "triangles": 1572,
+      "bounds_cm": [
+        [
+          -9.0,
+          -10.0,
+          -53.0
+        ],
+        [
+          9.0,
+          10.0,
+          5.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaHero2_LeftLeg",
+      "vertices": 488,
+      "triangles": 956,
+      "bounds_cm": [
+        [
+          -8.0,
+          -9.0,
+          -49.0
+        ],
+        [
+          22.0,
+          9.0,
+          4.0
+        ]
+      ]
+    },
+    {
+      "name": "SM_AlphaHero2_RightLeg",
+      "vertices": 488,
+      "triangles": 956,
+      "bounds_cm": [
+        [
+          -8.0,
+          -9.0,
+          -49.0
+        ],
+        [
+          22.0,
+          9.0,
+          4.0
+        ]
+      ]
+    }
+  ]
+}

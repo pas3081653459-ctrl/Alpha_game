@@ -160,7 +160,7 @@ void UAlphaCharacterVisualComponent::RefreshAppearance(int32 Hero, bool bEnemy, 
     ClothMaterial = MakeMaterial(bEnemyVisual ? Accent * .45f : Accent * 0.7f, 0.02f, 0.78f);
     MetalMaterial = MakeMaterial(FLinearColor(.23f, .3f, .38f), .25f, .55f);
     AccentMaterial = MakeMaterial(Accent, bEnemyVisual ? 0.65f : 0.35f, 0.42f);
-    FaceMaterial = MakeMaterial(bEnemyVisual ? FLinearColor(0.74f, 0.67f, 0.49f) : FLinearColor(0.7f, 0.55f, 0.37f), 0.08f, 0.7f);
+    FaceMaterial = MakeMaterial(bEnemyVisual ? FLinearColor(0.74f, 0.67f, 0.49f) : FLinearColor(0.9f, 0.68f, 0.52f), 0.08f, 0.7f);
     GlowMaterial = MakeMaterial(bEnemyVisual ? FLinearColor(1.0f, 0.19f, 0.02f) : Accent * 1.6f, 0.2f, 0.3f, bBossVisual ? 4.0f : 2.2f);
     // Keep skin and energy clean; only garments receive restrained woven detail.
     for (UMaterialInstanceDynamic* Garment : {ClothMaterial.Get(), AccentMaterial.Get()})
@@ -169,16 +169,92 @@ void UAlphaCharacterVisualComponent::RefreshAppearance(int32 Hero, bool bEnemy, 
         Garment->SetScalarParameterValue(TEXT("SurfaceStyle"), 3.f);
         Garment->SetScalarParameterValue(TEXT("TextureStrength"), .18f);
     }
-    BuildSilhouette();
+    const bool bAuthoredHero = !bEnemyVisual && BuildAuthoredHero();
+    if (!bAuthoredHero) BuildSilhouette();
     BuildWeapon();
     if (Enemy && !bBossVisual) BuildEnemyTell();
-    if (!bEnemyVisual) BuildAnimeDetails();
+    if (!bEnemyVisual && !bAuthoredHero) BuildAnimeDetails();
     SkillStartedAt = -1000.0;
     AttackStartedAt = -1000.0;
     HitUntil = PoiseUntil = -1000.0;
     bAttackCueSpawned = true;
     SetDefeated(bDefeatedVisual);
     UpdateTickBudget();
+}
+
+UStaticMeshComponent* UAlphaCharacterVisualComponent::AddAuthoredPart(UStaticMesh* Mesh,
+    USceneComponent* Parent, const FVector& Location)
+{
+    UStaticMeshComponent* Part = NewObject<UStaticMeshComponent>(GetOwner());
+    GetOwner()->AddInstanceComponent(Part);
+    Part->SetupAttachment(Parent);
+    Part->SetMobility(EComponentMobility::Movable);
+    Part->SetStaticMesh(Mesh);
+    Part->SetRelativeLocation(Location);
+    Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    Part->SetGenerateOverlapEvents(false);
+    Part->SetCanEverAffectNavigation(false);
+    Part->SetReceivesDecals(false);
+    // FBX semantic slots survive importer reordering; retain distinct skin, clothing and ink.
+    UMaterialInstanceDynamic* Ink = nullptr;
+    UMaterialInstanceDynamic* White = nullptr;
+    const TArray<FName> SlotNames = Part->GetMaterialSlotNames();
+    for (int32 Index = 0; Index < Part->GetNumMaterials(); ++Index)
+    {
+        const FName Slot = SlotNames.IsValidIndex(Index) ? SlotNames[Index] : NAME_None;
+        UMaterialInstanceDynamic* Material = ClothMaterial;
+        if (Slot == TEXT("Metal")) Material = MetalMaterial;
+        else if (Slot == TEXT("Accent")) Material = AccentMaterial;
+        else if (Slot == TEXT("Skin")) Material = FaceMaterial;
+        else if (Slot == TEXT("Glow")) Material = GlowMaterial;
+        else if (Slot == TEXT("Ink"))
+        {
+            if (!Ink)
+            {
+                const bool bHair = Mesh->GetName().EndsWith(TEXT("_Hair"));
+                const FLinearColor HairTint = HeroType == 2 ? FLinearColor(.72f, .53f, .32f)
+                    : (HeroType == 1 ? FLinearColor(.025f, .13f, .14f) : FLinearColor(.035f, .045f, .09f));
+                Ink = MakeMaterial(bHair ? HairTint : FLinearColor(.014f, .019f, .035f), 0.f, .85f);
+            }
+            Material = Ink;
+        }
+        else if (Slot == TEXT("White"))
+        {
+            if (!White) White = MakeMaterial(FLinearColor(.86f, .9f, .96f), 0.f, .8f);
+            Material = White;
+        }
+        Part->SetMaterial(Index, Material);
+    }
+    Part->RegisterComponent();
+    Parts.Add(Part);
+    return Part;
+}
+
+bool UAlphaCharacterVisualComponent::BuildAuthoredHero()
+{
+    static const TCHAR* Names[] = {TEXT("Body"), TEXT("Head"), TEXT("Hair"), TEXT("LeftArm"),
+        TEXT("RightArm"), TEXT("LeftLeg"), TEXT("RightLeg")};
+    UStaticMesh* Meshes[7] = {};
+    // Preflight all parts before attaching anything, so absent assets produce one complete fallback.
+    for (int32 Index = 0; Index < 7; ++Index)
+    {
+        const FString Name = FString::Printf(TEXT("SM_AlphaHero%d_%s"), HeroType, Names[Index]);
+        Meshes[Index] = LoadObject<UStaticMesh>(nullptr,
+            *FString::Printf(TEXT("/Game/Art/Characters/Generated/%s.%s"), *Name, *Name));
+        if (!Meshes[Index])
+        {
+            UE_LOG(LogTemp, Warning, TEXT("AlphaGame character art missing: %s. Run the Art build; using prototype silhouette."), *Name);
+            return false;
+        }
+    }
+    LeftArm = AddPivot(TEXT("ArtLeftArm"), BodyRoot, FVector(0, -24, 34));
+    RightArm = AddPivot(TEXT("ArtRightArm"), BodyRoot, FVector(0, 24, 34));
+    LeftLeg = AddPivot(TEXT("ArtLeftLeg"), BodyRoot, FVector(0, -12, -29));
+    RightLeg = AddPivot(TEXT("ArtRightLeg"), BodyRoot, FVector(0, 12, -29));
+    USceneComponent* Parents[] = {BodyRoot.Get(), BodyRoot.Get(), BodyRoot.Get(), LeftArm.Get(),
+        RightArm.Get(), LeftLeg.Get(), RightLeg.Get()};
+    for (int32 Index = 0; Index < 7; ++Index) AddAuthoredPart(Meshes[Index], Parents[Index], FVector::ZeroVector);
+    return true;
 }
 
 void UAlphaCharacterVisualComponent::BuildSilhouette()

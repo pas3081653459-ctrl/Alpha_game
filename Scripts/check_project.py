@@ -87,6 +87,17 @@ def main():
         'SourceArt/Surfaces/T_ForgeDetail.png',
         'SourceArt/Surfaces/T_ForgeNormal_N.png',
     ]
+    required.extend([
+        'Source/AlphaGame/Visuals/AlphaScenicBackdrop.h',
+        'Scripts/create_visual_assets.py', 'Scripts/create_backdrop_assets.py',
+        'Scripts/Editor/import_character_meshes.py', 'Scripts/generate_character_meshes.py',
+        'Scripts/validate_visual_report.py', 'SourceArt/Characters/manifest.json',
+        'SourceArt/Characters/References/AnimeHeroTurnarounds.png',
+        'SourceArt/Backdrops/T_ChapterPanoramas.png', 'SourceArt/Backdrops/manifest.json',
+    ])
+    required.extend(f'SourceArt/Characters/SM_AlphaHero{hero}_{part}.fbx'
+                    for hero in range(3)
+                    for part in ('Body','Head','Hair','LeftArm','RightArm','LeftLeg','RightLeg'))
     required.extend(f'SourceAudio/S_Alpha{name}.wav' for name in ('Slash','Hit','Poise','Roll','Skill','Ultimate'))
     for path in required:
         assert (ROOT / path).is_file(), f'Missing: {path}'
@@ -97,6 +108,20 @@ def main():
     assert hashlib.sha256(art_bytes).hexdigest() == art_manifest['sha256'], 'Anime atlas source differs from provenance manifest'
     assert struct.unpack('>II', art_bytes[16:24]) == (art_manifest['width'], art_manifest['height']), 'Anime atlas dimensions mismatch'
     assert art_manifest['width'] == art_manifest['height'] and art_manifest['width'] % 2 == 0, 'Atlas requires an even square 2x2 layout'
+    for folder, filename in [('SourceArt/Characters/References', 'AnimeHeroTurnarounds.png'),
+                             ('SourceArt/Backdrops', 'T_ChapterPanoramas.png')]:
+        image = ROOT / folder / filename
+        data = image.read_bytes()
+        manifest = json.loads((image.parent / 'manifest.json').read_text(encoding='utf-8'))
+        assert data[:8] == b'\x89PNG\r\n\x1a\n', f'Invalid generated PNG: {image}'
+        assert hashlib.sha256(data).hexdigest() == manifest['sha256'], f'Source image integrity failed: {image}'
+        assert struct.unpack('>II', data[16:24]) == (manifest['width'], manifest['height'])
+    character_manifest = json.loads((ROOT / 'SourceArt/Characters/manifest.json').read_text())
+    assert len(character_manifest['meshes']) == 21, 'Missing authored character parts'
+    for mesh in character_manifest['meshes']:
+        source = ROOT / 'SourceArt/Characters' / (mesh['name'] + '.fbx')
+        assert source.read_bytes().startswith(b'Kaydara FBX Binary'), f'FBX source is missing or an LFS pointer: {source}'
+        assert mesh['vertices'] > 0 and mesh['triangles'] > 0, 'Empty character mesh'
     config = (ROOT / 'Config/DefaultEngine.ini').read_text(encoding='utf-8')
     assert 'GameInstanceClass=/Script/AlphaGame.AlphaGameInstance' in config
     assert 'GlobalDefaultGameMode=/Script/AlphaGame.AlphaGameMode' in config
