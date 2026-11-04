@@ -21,6 +21,7 @@ Windows 三人局域网 2.5D 合作动作闯关项目，使用 **Unreal Engine 5
 - 合作跟进仍可增加敌人架势伤害，但不再产生能量或自动强化普通技能。
 - 持续按住 E 救援：距离、视线和独占目标检查；离距、受击、松手、死亡与断线中断；完成恢复 40% 生命。
 - 中文启动菜单、三职业卡、当前章节目标、折叠局域网入口与就近错误提示。
+- 本地保存声音/震动、角色偏好与章节解锁；菜单支持继续旅程和已解锁章节重玩。
 - 三章路线：灰渡码头（2波）→ 百炉工坊（3波＋双阶段铸炉官）→ 悬灯水道（2波）。
 - 渡伯、穗、澄三名固定NPC，战前/战后共18页中文对话；F交谈，读完确认后解锁战斗或下一章。
 - Boss 扇形横扫、直线炉火、落点重锤；基础网格地面预警与蓄力变色。
@@ -143,6 +144,8 @@ python3 Scripts/run_level_layout_tests.py
 python3 Scripts/run_level_layout_tests.py --sanitize
 python3 Scripts/run_enemy_tactics_tests.py
 python3 Scripts/run_enemy_tactics_tests.py --sanitize
+python3 Scripts/run_profile_tests.py
+python3 Scripts/run_profile_tests.py --sanitize
 python3 Scripts/generate_audio_sources.py --check
 ```
 
@@ -158,15 +161,15 @@ Windows 引擎环境执行 UE 自动化与打包：
 .\Scripts\Build-Windows.ps1 -EngineRoot 'C:\Program Files\Epic Games\UE_5.6' -Action Package
 ```
 
-目前有 **45 项 UE Automation 测试源码**，覆盖战斗、连招、空中取消、方向/奔跑、救援、能量、Boss、AI 同伴和队伍生命周期。脚本从源码提取完整测试名，要求本次报告中逐项成功，拒绝零测试、漏项、失败或未完成。报告位于 `Artifacts/Tests/`，Development 包位于 `Artifacts/Windows/`。
+目前有 **46 项 UE Automation 测试源码**，覆盖战斗、连招、空中取消、方向/奔跑、救援、能量、Boss、AI 同伴和队伍生命周期。脚本从源码提取完整测试名，要求本次报告中逐项成功，拒绝零测试、漏项、失败或未完成。报告位于 `Artifacts/Tests/`，Development 包位于 `Artifacts/Windows/`。
 
-**Unreal 编译、这 45 项 UE 测试、PowerShell、渲染、打包和三台 Windows 设备联机均未执行。**当前 Linux 云机器没有 Unreal Editor/UnrealBuildTool，测试结果不能替代这些门槛。
+**Unreal 编译、这 46 项 UE 测试、PowerShell、渲染、打包和三台 Windows 设备联机均未执行。**当前 Linux 云机器没有 Unreal Editor/UnrealBuildTool，测试结果不能替代这些门槛。
 
 ## 已知范围
 
 场景和角色已由基础几何组合为程序化美术，但仍没有正式手工模型、骨骼动画、配音及成品拟音、正式骨骼连段动画、局部顿帧或六关内容。技能效果与 Boss 预警均采用可保留于 Shipping 的实际网格，效果通过缩小与亮度衰减消失，不是透明材质或 Niagara。实际打包可见性待验收。沈砚格挡技能是短时保护与反击爆发原型，尚无成功防反识别。
 
-普通敌人已有每目标两名进攻限制；复杂战术协调、存档、画质设置、正式大厅与版本匹配检查仍待开发。不要用 Shipping 发布未验收内容。
+普通敌人已有每目标两名进攻限制；复杂战术协调、战斗中途存档、画质设置、正式大厅与版本匹配检查仍待开发。不要用 Shipping 发布未验收内容。
 
 ## 项目管理
 
@@ -175,7 +178,7 @@ Windows 引擎环境执行 UE 自动化与打包：
 - [验收步骤](Docs/ACCEPTANCE.md)
 - [验证证据与阻塞](Docs/VALIDATION.md)
 
-本轮剧情规则510项、布局5440项普通与UBSan通过，七套总8825项；45项UE测试仅源码、未执行。中文字体、小窗口布局、三章迁移及真实联机仍需UE验收。
+本轮剧情规则510项、布局5440项普通与UBSan通过，八套总9007项；46项UE测试仅源码、未执行。中文字体、小窗口布局、三章迁移及真实联机仍需UE验收。
 
 按路线自动推进独立开发工作；Windows 编译和真实局域网是下一道外部验收门槛。各云任务使用现有隔离目录，无需额外创建 Git worktree。
 
@@ -188,3 +191,5 @@ Windows 引擎环境执行 UE 自动化与打包：
 用户已反馈旧版NPC交互、剧情推进和刷怪正常；本轮新增敌人战术375项，七套规则共8825项及各自UBSan通过。新敌人、预警与合成音效待UE实机验收，见 [战斗遭遇说明](Docs/COMBAT_ENCOUNTERS.md)。`AlphaAudioVolume 0`可静音本次会话后续战斗音效。
 
 原始WAV按仓库规则使用Git LFS；更新后执行 `git lfs pull`。未安装时先安装Git LFS并执行 `git lfs install`，否则只有文本指针，不能被UE当声音导入。CI checkout已启用LFS。
+
+最新本地档案：Tab→声音与镜头→应用并保存；章节重玩/继续旅程从已解锁章节开头重新接任务。战后NPC确认后保存解锁，不恢复战斗状态或网络连接。用户反馈上一阶段测试通过，本轮9007项规则及UBSan通过，46项UE测试待运行，详见 [本地档案说明](Docs/LOCAL_PROFILE.md)。

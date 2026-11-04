@@ -27,6 +27,7 @@ private:
 
 namespace AlphaAudio
 {
+    ALPHAGAME_API bool SetVolume(float Volume);
     /** Call once from a confirmed cosmetic event. Never predicts or changes gameplay. */
     ALPHAGAME_API void Play(UWorld* World, const FVector& Location, EAlphaSoundCue Cue, float Volume = 1.f);
 }

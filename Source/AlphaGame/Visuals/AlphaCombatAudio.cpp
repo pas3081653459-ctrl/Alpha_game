@@ -82,6 +82,13 @@ USoundAttenuation* UAlphaCombatAudioLibrary::GetAttenuation()
     return Attenuation.Get();
 }
 
+bool AlphaAudio::SetVolume(float Volume)
+{
+    if (!FMath::IsFinite(Volume)) return false;
+    MasterVolume = FMath::Clamp(Volume, 0.f, 1.f);
+    return true;
+}
+
 void AlphaAudio::Play(UWorld* World, const FVector& Location, EAlphaSoundCue Cue, float Volume)
 {
     const int32 Index = static_cast<int32>(Cue);

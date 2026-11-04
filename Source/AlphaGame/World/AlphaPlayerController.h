@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "TimerManager.h"
 #include "AlphaPlayerController.generated.h"
 
 class UAlphaLobbyWidget;
@@ -27,6 +28,13 @@ public:
     UFUNCTION(Exec, BlueprintCallable)
     void ContinueChapter();
     UFUNCTION(Exec, BlueprintCallable)
+    bool ReplayChapter(int32 Chapter);
+    void SetPresentationSettings(float Volume, float Shake);
+    UFUNCTION(Client, Reliable)
+    void ClientRecordChapterComplete(int32 Chapter);
+    UFUNCTION(Client, Reliable)
+    void ClientRememberChapter(int32 Chapter);
+    UFUNCTION(Exec, BlueprintCallable)
     void InteractStory();
     void FinishStoryDialogue(bool bAdvance);
     static bool IsValidLANAddress(const FString& Address);
@@ -44,6 +52,11 @@ private:
     void ToggleLobby();
     void UpdateUIInputMode();
     void HideStoryDialogue();
+    void ApplySavedPresentationSettings();
+    void ApplyPreferredHeroWhenReady();
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+    UFUNCTION(Client, Reliable)
+    void ClientHeroSelectionAccepted(int32 Hero);
     UFUNCTION(Server, Reliable)
     void ServerInteractStory();
     UFUNCTION(Server, Reliable)
@@ -63,4 +76,6 @@ private:
     uint8 ServerStoryStage = 0;
     int32 ServerStoryRevision = -1;
     double LastStoryRequestAt = -1000.;
+    FTimerHandle PreferredHeroTimer;
+    bool bSubmittedHeroSelection = false;
 };

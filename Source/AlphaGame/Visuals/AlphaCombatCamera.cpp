@@ -48,10 +48,12 @@ void AAlphaCombatCamera::Tick(float DeltaSeconds)
     if (!Player || !Player->IsLocalController()) return;
     const AAlphaGameState* ChapterState = GetWorld()->GetGameState<AAlphaGameState>();
     const int32 Chapter = ChapterState ? ChapterState->ChapterIndex : 0;
+    const int32 Revision = ChapterState ? ChapterState->StoryRevision : 0;
     const FVector ChapterOrigin = AAlphaGameState::GetChapterOrigin(Chapter);
-    if (LastChapter != Chapter)
+    if (LastChapter != Chapter || LastStoryRevision != Revision)
     {
         LastChapter = Chapter;
+        LastStoryRevision = Revision;
         bInitialized = false; // Do not pan across the empty gap between chapters.
         Impact = 0.f;
         LastHealth = -1.f;

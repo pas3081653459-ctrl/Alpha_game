@@ -6,6 +6,8 @@
 #include "Rules/LevelLayoutRules.h"
 #include "Rules/EnemyTacticsRules.h"
 #include "World/AlphaPlayerController.h"
+#include "World/AlphaGameInstance.h"
+#include "Rules/ProfileRules.h"
 #include "Characters/AlphaCharacter.h"
 #include "Characters/AlphaEnemy.h"
 #include "Characters/AlphaCompanion.h"
@@ -275,6 +277,8 @@ bool AAlphaGameMode::StartPrototypeRun()
     State->StoryStage = EAlphaStoryStage::Combat;
     EnsureRoundMonitor();
     QueueRouteEncounter(false);
+    for (APlayerController* Human : Humans)
+        if (AAlphaPlayerController* Player = Cast<AAlphaPlayerController>(Human)) Player->ClientRememberChapter(State->ChapterIndex);
     return true;
 }
 
@@ -592,6 +596,9 @@ bool AAlphaGameMode::TalkToStoryNPC(AAlphaCharacter* Speaker)
     }
     if (!AlphaStoryRules::CanTalk(State->ChapterIndex, static_cast<AlphaStoryRules::Stage>(State->StoryStage), bEligible, bSafeRound)) return false;
     State->StoryStage = static_cast<EAlphaStoryStage>(AlphaStoryRules::AfterTalk(static_cast<AlphaStoryRules::Stage>(State->StoryStage)));
+    if (State->StoryStage == EAlphaStoryStage::Complete)
+        for (APlayerController* Human : HumanControllers())
+            if (AAlphaPlayerController* Player = Cast<AAlphaPlayerController>(Human)) Player->ClientRecordChapterComplete(State->ChapterIndex);
     State->ForceNetUpdate();
     return true;
 }
@@ -603,6 +610,23 @@ bool AAlphaGameMode::AdvanceChapter()
         static_cast<AlphaStoryRules::Stage>(State->StoryStage), State->RoundState == EAlphaRoundState::Victory)) return false;
     ++State->ChapterIndex;
     RestartPrototypeRound();
+    for (APlayerController* Human : HumanControllers())
+        if (AAlphaPlayerController* Player = Cast<AAlphaPlayerController>(Human)) Player->ClientRememberChapter(State->ChapterIndex);
+    State->ForceNetUpdate();
+    return true;
+}
+
+bool AAlphaGameMode::ReplayChapter(int32 Chapter)
+{
+    AAlphaGameState* State = GetGameState<AAlphaGameState>();
+    UAlphaGameInstance* Instance = GetWorld()->GetGameInstance<UAlphaGameInstance>();
+    const bool bSafe = State && (State->RoundState == EAlphaRoundState::Waiting
+        || State->RoundState == EAlphaRoundState::Victory || State->RoundState == EAlphaRoundState::Defeat);
+    if (!Instance || !AlphaProfileRules::CanReplay(Chapter, Instance->GetHighestUnlockedChapter(), HasAuthority(), bSafe)) return false;
+    State->ChapterIndex = Chapter;
+    RestartPrototypeRound(); // Cancels stale dialogue, enemies and route progression.
+    for (APlayerController* Human : HumanControllers())
+        if (AAlphaPlayerController* Player = Cast<AAlphaPlayerController>(Human)) Player->ClientRememberChapter(Chapter);
     State->ForceNetUpdate();
     return true;
 }

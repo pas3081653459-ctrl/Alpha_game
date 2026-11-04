@@ -9,6 +9,7 @@
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/ScrollBox.h"
 #include "Components/SizeBox.h"
+#include "Components/Slider.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
@@ -96,6 +97,19 @@ void UAlphaLobbyWidget::NativeOnInitialized()
     ContinueButton = AddButton(Story, TEXT("前往下一章"));
     ContinueButton->SetBackgroundColor(FLinearColor(.7f, .19f, .055f));
     ContinueButton->OnClicked.AddDynamic(this, &UAlphaLobbyWidget::Continue);
+    AddButton(Story, TEXT("章节重玩 · 展开 / 收起"))->OnClicked.AddDynamic(this, &UAlphaLobbyWidget::ToggleReplay);
+    ReplayPanel = WidgetTree->ConstructWidget<UVerticalBox>();
+    Story->AddChildToVerticalBox(ReplayPanel);
+    ReplayPanel->SetVisibility(ESlateVisibility::Collapsed);
+    AddText(ReplayPanel, TEXT("完成章节后解锁下一章。房主可在准备或结算时带全队重玩，从本章开头重新接任务；战斗中不能切换。"), 13, AlphaLobbyStyle::Muted);
+    ResumeButton = AddButton(ReplayPanel, TEXT("继续上次章节 · 从章节开头"));
+    ResumeButton->OnClicked.AddDynamic(this, &UAlphaLobbyWidget::ResumeSavedChapter);
+    ReplayButtons.Add(AddButton(ReplayPanel, TEXT("第一章 · 灰渡码头")));
+    ReplayButtons.Last()->OnClicked.AddDynamic(this, &UAlphaLobbyWidget::ReplayDock);
+    ReplayButtons.Add(AddButton(ReplayPanel, TEXT("第二章 · 百炉工坊")));
+    ReplayButtons.Last()->OnClicked.AddDynamic(this, &UAlphaLobbyWidget::ReplayForge);
+    ReplayButtons.Add(AddButton(ReplayPanel, TEXT("第三章 · 悬灯水道")));
+    ReplayButtons.Last()->OnClicked.AddDynamic(this, &UAlphaLobbyWidget::ReplayCanal);
     AddText(Story, TEXT("一个人也能开始\n默认补齐 AI 队友；进入场景后，靠近固定 NPC 按 F 阅读故事。"), 14, AlphaLobbyStyle::Muted);
     AddText(Story, TEXT("WASD 移动 / 双击奔跑\nJ 五段连招 · K 跳跃 · L 翻滚\nU / I / O 技能 · 按住 E 救援\nF 交谈 · Tab 打开或关闭此面板"), 13, AlphaLobbyStyle::Muted);
 
@@ -115,6 +129,29 @@ void UAlphaLobbyWidget::NativeOnInitialized()
     CompanionButton = AddButton(Party, TEXT("AI 队友：开启 · 自动补齐三人"));
     CompanionButton->OnClicked.AddDynamic(this, &UAlphaLobbyWidget::ToggleCompanions);
 
+    AddButton(Party, TEXT("声音与镜头 · 展开 / 收起"))->OnClicked.AddDynamic(this, &UAlphaLobbyWidget::ToggleSettings);
+    SettingsPanel = WidgetTree->ConstructWidget<UVerticalBox>();
+    Party->AddChildToVerticalBox(SettingsPanel);
+    SettingsPanel->SetVisibility(ESlateVisibility::Collapsed);
+    AddText(SettingsPanel, TEXT("设置仅影响本机。拖动后点击应用；音量或镜头震动设为 0 即关闭。"), 13, AlphaLobbyStyle::Muted);
+    VolumeText = AddText(SettingsPanel, TEXT("战斗音量"), 15, AlphaLobbyStyle::Text);
+    VolumeSlider = WidgetTree->ConstructWidget<USlider>();
+    VolumeSlider->SetMinValue(0.f);
+    VolumeSlider->SetMaxValue(1.f);
+    VolumeSlider->SetStepSize(.05f);
+    VolumeSlider->OnValueChanged.AddDynamic(this, &UAlphaLobbyWidget::SettingsValueChanged);
+    SettingsPanel->AddChildToVerticalBox(VolumeSlider)->SetPadding(FMargin(0, 0, 0, 12));
+    ShakeText = AddText(SettingsPanel, TEXT("镜头震动"), 15, AlphaLobbyStyle::Text);
+    ShakeSlider = WidgetTree->ConstructWidget<USlider>();
+    ShakeSlider->SetMinValue(0.f);
+    ShakeSlider->SetMaxValue(1.f);
+    ShakeSlider->SetStepSize(.05f);
+    ShakeSlider->OnValueChanged.AddDynamic(this, &UAlphaLobbyWidget::SettingsValueChanged);
+    SettingsPanel->AddChildToVerticalBox(ShakeSlider)->SetPadding(FMargin(0, 0, 0, 12));
+    ApplySettingsButton = AddButton(SettingsPanel, TEXT("应用并保存到本机"));
+    ApplySettingsButton->OnClicked.AddDynamic(this, &UAlphaLobbyWidget::ApplySettings);
+    ProfileStatusText = AddText(Party, TEXT(""), 13, AlphaLobbyStyle::Muted);
+
     AddButton(Party, TEXT("局域网联机 · 展开 / 收起"))->OnClicked.AddDynamic(this, &UAlphaLobbyWidget::ToggleLAN);
     LANPanel = WidgetTree->ConstructWidget<UVerticalBox>();
     Party->AddChildToVerticalBox(LANPanel);
@@ -128,6 +165,7 @@ void UAlphaLobbyWidget::NativeOnInitialized()
     ErrorText = AddText(Party, TEXT(""), 13, FLinearColor(1.f, .5f, .35f));
     RestartButton = AddButton(Party, TEXT("重新开始当前章节 · 房主 / 单人"));
     RestartButton->OnClicked.AddDynamic(this, &UAlphaLobbyWidget::Restart);
+    LoadPresentationSettings();
     UpdateResponsiveLayout(1000.f);
 }
 
@@ -166,6 +204,7 @@ void UAlphaLobbyWidget::PrepareForDisplay()
 {
     const AAlphaGameState* State = GetWorld()->GetGameState<AAlphaGameState>();
     bObservedPreparation = State && State->RoundState == EAlphaRoundState::Waiting;
+    LoadPresentationSettings();
 }
 
 void UAlphaLobbyWidget::NativeTick(const FGeometry& Geometry, float DeltaSeconds)
@@ -224,11 +263,32 @@ void UAlphaLobbyWidget::NativeTick(const FGeometry& Geometry, float DeltaSeconds
         HeroButtons[Index]->SetIsEnabled(bCanSelect);
         HeroButtons[Index]->SetBackgroundColor(Index == Hero ? FLinearColor(.65f, .19f, .065f) : FLinearColor(.075f, .13f, .22f));
     }
+    const UAlphaGameInstance* Instance = Cast<UAlphaGameInstance>(GetWorld()->GetGameInstance());
+    const int32 Unlocked = Instance ? FMath::Clamp(Instance->GetHighestUnlockedChapter(), 0, 2) : 0;
+    for (int32 Index = 0; Index < ReplayButtons.Num(); ++Index)
+    {
+        const bool bUnlocked = Index <= Unlocked;
+        ReplayButtons[Index]->SetIsEnabled(Instance && bCanHostControl && bCanSelect && bUnlocked);
+        ReplayButtons[Index]->SetBackgroundColor(Index == Chapter ? FLinearColor(.65f, .19f, .065f) : FLinearColor(.075f, .13f, .22f));
+        if (UTextBlock* Caption = Cast<UTextBlock>(ReplayButtons[Index]->GetContent()))
+            Caption->SetText(FText::FromString(FString::Printf(TEXT("%s%s"), ChapterNames[Index],
+                bUnlocked ? TEXT(" · 重玩") : TEXT(" · 尚未解锁"))));
+    }
+    ApplySettingsButton->SetIsEnabled(Instance && bSettingsDirty);
+    ResumeButton->SetIsEnabled(Instance && bCanHostControl && bCanSelect);
+    if (Instance)
+        if (UTextBlock* Caption = Cast<UTextBlock>(ResumeButton->GetContent()))
+            Caption->SetText(FText::FromString(FString::Printf(TEXT("继续旅程 · %s（从本章开头）"), ChapterNames[FMath::Clamp(Instance->GetLastChapter(),0,2)])));
+    const FString ProfileError = Instance ? Instance->GetProfileStatusError() : TEXT("本地设置尚未就绪。");
+    ProfileStatusText->SetText(FText::FromString(ProfileError.IsEmpty()
+        ? (bSettingsDirty ? TEXT("有未应用的声音 / 镜头设置。") : TEXT("本地设置已载入；章节解锁与设置保存在本机。"))
+        : ProfileError));
+    ProfileStatusText->SetColorAndOpacity(FSlateColor(ProfileError.IsEmpty()
+        ? AlphaLobbyStyle::Muted : FLinearColor(1.f, .5f, .35f)));
     FString Error = LocalError;
     if (Error.IsEmpty())
     {
-        if (const UAlphaGameInstance* Instance = Cast<UAlphaGameInstance>(GetWorld()->GetGameInstance()))
-            Error = Instance->LastConnectionError;
+        if (Instance) Error = Instance->LastConnectionError;
     }
     ErrorText->SetText(FText::FromString(Error));
     ErrorText->SetVisibility(Error.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
@@ -274,6 +334,67 @@ void UAlphaLobbyWidget::ToggleLAN()
     bLANVisible = !bLANVisible;
     LANPanel->SetVisibility(bLANVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 }
+
+void UAlphaLobbyWidget::LoadPresentationSettings()
+{
+    if (!VolumeSlider || !ShakeSlider) return;
+    const UAlphaGameInstance* Instance = GetWorld() ? Cast<UAlphaGameInstance>(GetWorld()->GetGameInstance()) : nullptr;
+    VolumeSlider->SetValue(Instance ? FMath::Clamp(Instance->GetAudioVolume(), 0.f, 1.f) : .75f);
+    ShakeSlider->SetValue(Instance ? FMath::Clamp(Instance->GetCameraShake(), 0.f, 1.f) : .35f);
+    bSettingsDirty = false;
+    RefreshSettingsLabels();
+}
+
+void UAlphaLobbyWidget::RefreshSettingsLabels()
+{
+    if (!VolumeSlider || !ShakeSlider || !VolumeText || !ShakeText) return;
+    VolumeText->SetText(FText::FromString(FString::Printf(TEXT("战斗音量  %d%%"), FMath::RoundToInt(VolumeSlider->GetValue() * 100.f))));
+    ShakeText->SetText(FText::FromString(FString::Printf(TEXT("镜头震动  %d%%"), FMath::RoundToInt(ShakeSlider->GetValue() * 100.f))));
+}
+
+void UAlphaLobbyWidget::SettingsValueChanged(float Value)
+{
+    (void)Value;
+    bSettingsDirty = true;
+    RefreshSettingsLabels();
+}
+
+void UAlphaLobbyWidget::ApplySettings()
+{
+    AAlphaPlayerController* PC = Cast<AAlphaPlayerController>(GetOwningPlayer());
+    if (!PC || !VolumeSlider || !ShakeSlider) return;
+    PC->SetPresentationSettings(VolumeSlider->GetValue(), ShakeSlider->GetValue());
+    const UAlphaGameInstance* Instance = Cast<UAlphaGameInstance>(GetWorld()->GetGameInstance());
+    bSettingsDirty = !Instance || !Instance->GetProfileStatusError().IsEmpty();
+}
+
+void UAlphaLobbyWidget::ToggleSettings()
+{
+    bSettingsVisible = !bSettingsVisible;
+    SettingsPanel->SetVisibility(bSettingsVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+}
+
+void UAlphaLobbyWidget::ToggleReplay()
+{
+    bReplayVisible = !bReplayVisible;
+    ReplayPanel->SetVisibility(bReplayVisible ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+}
+
+void UAlphaLobbyWidget::Replay(int32 Chapter)
+{
+    AAlphaPlayerController* PC = Cast<AAlphaPlayerController>(GetOwningPlayer());
+    if (!PC || !PC->ReplayChapter(Chapter))
+    {
+        LocalError = TEXT("仅房主 / 单人可以在准备或结算时重玩已解锁章节。");
+        return;
+    }
+    LocalError.Reset();
+}
+
+void UAlphaLobbyWidget::ReplayDock() { Replay(0); }
+void UAlphaLobbyWidget::ReplayForge() { Replay(1); }
+void UAlphaLobbyWidget::ReplayCanal() { Replay(2); }
+
 void UAlphaLobbyWidget::HeroBlade()
 {
     if (AAlphaPlayerController* PC = Cast<AAlphaPlayerController>(GetOwningPlayer())) PC->SelectHero(0);
@@ -295,4 +416,9 @@ void UAlphaLobbyWidget::HeroLantern()
 void UAlphaLobbyWidget::Close()
 {
     if (AAlphaPlayerController* PC = Cast<AAlphaPlayerController>(GetOwningPlayer())) PC->SetLobbyVisible(false);
+}
+
+void UAlphaLobbyWidget::ResumeSavedChapter()
+{
+    if (const UAlphaGameInstance* Instance = GetWorld()->GetGameInstance<UAlphaGameInstance>()) Replay(Instance->GetLastChapter());
 }

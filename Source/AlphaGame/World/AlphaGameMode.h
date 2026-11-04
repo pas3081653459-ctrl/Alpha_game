@@ -23,6 +23,7 @@ public:
     bool StartPrototypeRun();
     bool TalkToStoryNPC(AAlphaCharacter* Speaker);
     bool AdvanceChapter();
+    bool ReplayChapter(int32 Chapter);
     bool IsSelectionAllowed() const;
     bool SetCompanionFillEnabled(bool bEnabled);
     void RefreshCompanions();

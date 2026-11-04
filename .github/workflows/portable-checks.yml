@@ -48,3 +48,7 @@ jobs:
         run: python3 Scripts/run_enemy_tactics_tests.py --sanitize
       - name: Verify original audio source integrity
         run: python3 Scripts/generate_audio_sources.py --check
+      - name: Compile and run local profile rules
+        run: python3 Scripts/run_profile_tests.py
+      - name: Check undefined behavior in local profile rules
+        run: python3 Scripts/run_profile_tests.py --sanitize

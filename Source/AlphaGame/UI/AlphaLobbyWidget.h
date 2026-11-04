@@ -10,6 +10,7 @@ class UButton;
 class UVerticalBox;
 class UBorder;
 class USizeBox;
+class USlider;
 
 /** Responsive startup and party UI; all progression stays on the authority. */
 UCLASS()
@@ -25,6 +26,9 @@ private:
     UButton* AddButton(UVerticalBox* Panel, const FString& Label);
     UTextBlock* AddText(UVerticalBox* Panel, const FString& Label, int32 FontSize, FLinearColor Color);
     void UpdateResponsiveLayout(float Width);
+    void LoadPresentationSettings();
+    void RefreshSettingsLabels();
+    void Replay(int32 Chapter);
     UFUNCTION() void Host();
     UFUNCTION() void Join();
     UFUNCTION() void Start();
@@ -32,6 +36,14 @@ private:
     UFUNCTION() void Restart();
     UFUNCTION() void ToggleLAN();
     UFUNCTION() void ToggleCompanions();
+    UFUNCTION() void ToggleSettings();
+    UFUNCTION() void ToggleReplay();
+    UFUNCTION() void SettingsValueChanged(float Value);
+    UFUNCTION() void ApplySettings();
+    UFUNCTION() void ReplayDock();
+    UFUNCTION() void ReplayForge();
+    UFUNCTION() void ReplayCanal();
+    UFUNCTION() void ResumeSavedChapter();
     UFUNCTION() void HeroBlade();
     UFUNCTION() void HeroWeaver();
     UFUNCTION() void HeroLantern();
@@ -49,6 +61,16 @@ private:
     UPROPERTY(Transient) TObjectPtr<UButton> CompanionButton;
     UPROPERTY(Transient) TArray<TObjectPtr<UButton>> HeroButtons;
     UPROPERTY(Transient) TObjectPtr<UVerticalBox> LANPanel;
+    UPROPERTY(Transient) TObjectPtr<UVerticalBox> SettingsPanel;
+    UPROPERTY(Transient) TObjectPtr<UVerticalBox> ReplayPanel;
+    UPROPERTY(Transient) TObjectPtr<USlider> VolumeSlider;
+    UPROPERTY(Transient) TObjectPtr<USlider> ShakeSlider;
+    UPROPERTY(Transient) TObjectPtr<UTextBlock> VolumeText;
+    UPROPERTY(Transient) TObjectPtr<UTextBlock> ShakeText;
+    UPROPERTY(Transient) TObjectPtr<UTextBlock> ProfileStatusText;
+    UPROPERTY(Transient) TObjectPtr<UButton> ApplySettingsButton;
+    UPROPERTY(Transient) TArray<TObjectPtr<UButton>> ReplayButtons;
+    UPROPERTY(Transient) TObjectPtr<UButton> ResumeButton;
     UPROPERTY(Transient) TObjectPtr<UBorder> Backdrop;
     UPROPERTY(Transient) TObjectPtr<UBorder> StoryCard;
     UPROPERTY(Transient) TObjectPtr<UBorder> PartyCard;
@@ -58,4 +80,7 @@ private:
     bool bCompactLayout = false;
     bool bHasLayout = false;
     bool bObservedPreparation = false;
+    bool bSettingsVisible = false;
+    bool bReplayVisible = false;
+    bool bSettingsDirty = false;
 };

@@ -11,6 +11,7 @@
 #include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Visuals/AlphaCombatCamera.h"
+#include "Visuals/AlphaCombatAudio.h"
 #include "Components/InputComponent.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
@@ -34,6 +35,66 @@ void AAlphaPlayerController::BeginPlay()
         SetViewTarget(Camera);
     }
     SetLobbyVisible(true);
+    ApplySavedPresentationSettings();
+    GetWorldTimerManager().SetTimer(PreferredHeroTimer, this, &AAlphaPlayerController::ApplyPreferredHeroWhenReady, .25f, true);
+}
+
+void AAlphaPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    GetWorldTimerManager().ClearTimer(PreferredHeroTimer);
+    Super::EndPlay(EndPlayReason);
+}
+
+void AAlphaPlayerController::ApplySavedPresentationSettings()
+{
+    if (!IsLocalController()) return;
+    if (const UAlphaGameInstance* Instance = GetWorld()->GetGameInstance<UAlphaGameInstance>())
+    {
+        AlphaAudio::SetVolume(Instance->GetAudioVolume());
+        CameraShakeStrength(Instance->GetCameraShake());
+    }
+}
+
+void AAlphaPlayerController::SetPresentationSettings(float Volume, float Shake)
+{
+    if (!IsLocalController()) return;
+    if (UAlphaGameInstance* Instance = GetWorld()->GetGameInstance<UAlphaGameInstance>())
+        if (Instance->SetPresentationSettings(Volume,Shake)) ApplySavedPresentationSettings();
+}
+
+void AAlphaPlayerController::ApplyPreferredHeroWhenReady()
+{
+    const AAlphaGameState* State = GetWorld()->GetGameState<AAlphaGameState>();
+    AAlphaCharacter* Character = Cast<AAlphaCharacter>(GetPawn());
+    if (!State || !Character) return;
+    GetWorldTimerManager().ClearTimer(PreferredHeroTimer);
+    if (State->RoundState != EAlphaRoundState::Waiting || bSubmittedHeroSelection) return;
+    if (const UAlphaGameInstance* Instance = GetWorld()->GetGameInstance<UAlphaGameInstance>())
+        if (Character->GetArchetype() != Instance->GetPreferredHero()) SelectHero(Instance->GetPreferredHero());
+}
+
+bool AAlphaPlayerController::ReplayChapter(int32 Chapter)
+{
+    if (!IsLocalController()) return false;
+    AAlphaGameMode* Mode = GetWorld()->GetAuthGameMode<AAlphaGameMode>();
+    if (!Mode || !Mode->ReplayChapter(Chapter)) return false;
+    FinishStoryDialogue(false);
+    SetLobbyVisible(false);
+    return true;
+}
+
+void AAlphaPlayerController::ClientRecordChapterComplete_Implementation(int32 Chapter)
+{
+    if (!IsLocalController()) return;
+    if (UAlphaGameInstance* Instance = GetWorld()->GetGameInstance<UAlphaGameInstance>())
+        if (Instance->RecordChapterComplete(Chapter)) Instance->SetPreferredChapter(FMath::Min(Chapter+1,2));
+}
+
+void AAlphaPlayerController::ClientRememberChapter_Implementation(int32 Chapter)
+{
+    if (!IsLocalController()) return;
+    if (UAlphaGameInstance* Instance = GetWorld()->GetGameInstance<UAlphaGameInstance>())
+        if (Chapter <= Instance->GetHighestUnlockedChapter()) Instance->SetPreferredChapter(Chapter);
 }
 
 void AAlphaPlayerController::CameraShakeStrength(float Strength)
@@ -198,7 +259,11 @@ void AAlphaPlayerController::StartRun()
 
 void AAlphaPlayerController::SelectHero(int32 HeroIndex)
 {
-    if (IsLocalController()) ServerSelectHero(HeroIndex);
+    if (IsLocalController())
+    {
+        bSubmittedHeroSelection = true;
+        ServerSelectHero(HeroIndex);
+    }
 }
 
 void AAlphaPlayerController::ServerSelectHero_Implementation(int32 HeroIndex)
@@ -212,6 +277,13 @@ void AAlphaPlayerController::ServerSelectHero_Implementation(int32 HeroIndex)
     }
     Character->SetArchetype(HeroIndex);
     Mode->RefreshCompanions();
+    ClientHeroSelectionAccepted(HeroIndex);
+}
+
+void AAlphaPlayerController::ClientHeroSelectionAccepted_Implementation(int32 Hero)
+{
+    if (!IsLocalController()) return;
+    if (UAlphaGameInstance* Instance = GetWorld()->GetGameInstance<UAlphaGameInstance>()) Instance->SetPreferredHero(Hero);
 }
 
 void AAlphaPlayerController::SetBotFill(int32 Enabled)

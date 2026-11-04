@@ -26,4 +26,5 @@ private:
     TWeakObjectPtr<APawn> LastPawn;
     bool bInitialized = false;
     int32 LastChapter = -1;
+    int32 LastStoryRevision = -1;
 };
